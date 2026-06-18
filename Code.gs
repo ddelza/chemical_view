@@ -192,9 +192,16 @@ function getStudentReflections(studentName, ban, modum) {
       const banCol   = findColIndex(header, ['반', '학반', '학년반', '학년/반', '반을 입력', '학반 입력']);
       const modumCol = findColIndex(header, ['모둠', '모둠번호', '그룹', '팀']);
 
-      const questionHeaders = [];
+      // K~P열 중 헤더가 실제로 있는 열만 사용
+      const validCols = [];
       for (let c = RESPONSE_COL_START; c <= RESPONSE_COL_END; c++) {
-        questionHeaders.push(c < header.length ? header[c] : `${c + 1}열`);
+        const h = c < header.length ? header[c].trim() : '';
+        if (h) validCols.push({ colIndex: c, question: h });
+      }
+      if (validCols.length === 0) {
+        for (let c = RESPONSE_COL_START; c <= RESPONSE_COL_END; c++) {
+          validCols.push({ colIndex: c, question: `${c + 1}열` });
+        }
       }
 
       const matchedRows = [];
@@ -209,16 +216,19 @@ function getStudentReflections(studentName, ban, modum) {
         const modumMatch = !modum || rModum === modum;
 
         if (nameMatch && banMatch && modumMatch) {
-          const answers = [];
-          for (let c = RESPONSE_COL_START; c <= RESPONSE_COL_END; c++) {
-            answers.push(c < row.length ? String(row[c] || '').trim() : '');
-          }
+          const answers = validCols.map(({ colIndex: c }) =>
+            c < row.length ? String(row[c] || '').trim() : ''
+          );
           matchedRows.push({ timestamp: String(row[0] || ''), answers });
         }
       }
 
       if (matchedRows.length > 0) {
-        reflections.push({ source: label, questions: questionHeaders, responses: matchedRows });
+        reflections.push({
+          source: label,
+          questions: validCols.map(v => v.question),
+          responses: matchedRows
+        });
       }
     } catch (e) {
       Logger.log(`[getStudentReflections] ${label} 오류: ${e}`);
