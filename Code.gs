@@ -7,8 +7,8 @@ const SS_INQUIRY = '1JJy80Ah9NaJN_BNk21Nyb7P3dtli5OFtR2AfMNgPkb4';
 const STUDENT_INFO_SHEET = '학생 정보';
 const RESPONSE_SHEET = '설문지 응답 시트1';
 
-// K~P열 = 인덱스 10~15 (0-based)
-const RESPONSE_COL_START = 10;
+// G~P열 = 인덱스 6~15 (0-based)
+const RESPONSE_COL_START = 6;
 const RESPONSE_COL_END = 15;
 
 // =============================================
