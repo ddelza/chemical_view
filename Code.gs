@@ -5,10 +5,10 @@ const SS_BOOTH = '1avD0D72BhxP7aZfM0BO7Y4xc2B7UWrT9U5o5S6fG2tU';
 const SS_INQUIRY = '1JJy80Ah9NaJN_BNk21Nyb7P3dtli5OFtR2AfMNgPkb4';
 
 const STUDENT_INFO_SHEET = '학생 정보';
-const RESPONSE_SHEET = '설문지 응답 시트1';
+const RESPONSE_SHEET = '정리';
 
-// G~P열 = 인덱스 6~15 (0-based)
-const RESPONSE_COL_START = 6;
+// K~P열 = 인덱스 10~15 (0-based)
+const RESPONSE_COL_START = 10;
 const RESPONSE_COL_END = 15;
 
 // =============================================
@@ -124,7 +124,7 @@ function getAllStudents() {
 
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        const name = col.name >= 0 ? String(row[col.name]).trim() : '';
+        const name = col.name >= 0 ? norm(row[col.name]) : '';
         if (!name) continue;
 
         result.push({
@@ -133,7 +133,7 @@ function getAllStudents() {
           ban:   col.ban   >= 0 ? String(row[col.ban]).trim()   : '',
           modum: col.modum >= 0 ? String(row[col.modum]).trim() : '',
           num:   col.num   >= 0 ? String(row[col.num]).trim()   : '',
-          name:  name,
+          name:  col.name  >= 0 ? String(row[col.name]).trim()  : '',
         });
       }
     } catch (e) {
@@ -180,7 +180,7 @@ function getStudentReflections(studentName, ban, modum) {
   ].forEach(({ id, label }) => {
     try {
       const ss = SpreadsheetApp.openById(id);
-      const sheet = findSheet(ss, [RESPONSE_SHEET, '설문지 응답 시트 1', '응답시트1', '응답 시트1', 'Form Responses 1']);
+      const sheet = findSheet(ss, [RESPONSE_SHEET, '정리', '설문지 응답 시트1', '설문지 응답 시트 1', '응답시트1', 'Form Responses 1']);
       if (!sheet) { Logger.log(`[${label}] 응답 시트 없음`); return; }
 
       const data = sheet.getDataRange().getValues();
@@ -211,9 +211,9 @@ function getStudentReflections(studentName, ban, modum) {
         const rBan   = banCol   >= 0 ? String(row[banCol]).trim()   : '';
         const rModum = modumCol >= 0 ? String(row[modumCol]).trim() : '';
 
-        const nameMatch  = rName === studentName;
-        const banMatch   = !ban   || rBan === ban;
-        const modumMatch = !modum || rModum === modum;
+        const nameMatch  = norm(rName) === norm(studentName);
+        const banMatch   = !ban   || norm(rBan)   === norm(ban);
+        const modumMatch = !modum || norm(rModum) === norm(modum);
 
         if (nameMatch && banMatch && modumMatch) {
           const answers = validCols.map(({ colIndex: c }) =>
@@ -241,6 +241,11 @@ function getStudentReflections(studentName, ban, modum) {
 // =============================================
 // 유틸리티
 // =============================================
+// 공백·전각공백·제로폭 문자 제거 후 NFC 정규화
+function norm(s) {
+  return String(s).replace(/[\s ​　]/g, '').normalize('NFC');
+}
+
 function findSheet(ss, candidates) {
   for (const name of candidates) {
     const s = ss.getSheetByName(name);
