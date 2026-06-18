@@ -399,29 +399,53 @@ function naturalSort(a, b) {
 }
 
 // =============================================
-// 동료평가 — 칩용 횟수 맵 (이름 → {given, received})
+// 동료평가 공통 — raw 시트 로드 + 중복 제거
+// (작성자·대상 쌍이 같으면 글자수 가장 긴 행만 유지)
+// =============================================
+function loadDeduplicatedPeerRows() {
+  const CONTENT_START = 5;
+  const ss = SpreadsheetApp.openById(SS_PEER);
+  const sheet = findSheet(ss, ['data', 'Data', '데이터']);
+  if (!sheet) return { header: [], rows: [] };
+
+  const raw    = sheet.getDataRange().getValues();
+  const header = raw[0];
+
+  // (작성자norm, 대상norm) → 가장 긴 행
+  const best = {};
+  for (let i = 1; i < raw.length; i++) {
+    const row   = raw[i];
+    const wName = norm(row[1] || '');
+    const tName = norm(row[3] || '');
+    if (!wName || !tName) continue;
+
+    const key  = wName + '||' + tName;
+    const text = header.slice(CONTENT_START)
+      .map((_, idx) => String(row[CONTENT_START + idx] || '').trim())
+      .join('');
+    const len = text.length;
+
+    if (!best[key] || len >= best[key].len) {
+      best[key] = { row, len };
+    }
+  }
+
+  return { header, rows: Object.values(best).map(b => b.row), CONTENT_START };
+}
+
+// =============================================
+// 동료평가 — 칩용 횟수 맵 (중복 제거 적용)
 // =============================================
 function buildPeerCountMap() {
   const map = {};
   try {
-    const ss = SpreadsheetApp.openById(SS_PEER);
-    const sheet = findSheet(ss, ['data', 'Data', '데이터']);
-    if (!sheet) return map;
-
-    const data = sheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const wName = norm(row[1] || ''); // B열
-      const tName = norm(row[3] || ''); // D열
-      if (wName) {
-        if (!map[wName]) map[wName] = { given: 0, received: 0 };
-        map[wName].given++;
-      }
-      if (tName) {
-        if (!map[tName]) map[tName] = { given: 0, received: 0 };
-        map[tName].received++;
-      }
-    }
+    const { rows } = loadDeduplicatedPeerRows();
+    rows.forEach(row => {
+      const wName = norm(row[1] || '');
+      const tName = norm(row[3] || '');
+      if (wName) { if (!map[wName]) map[wName] = { given: 0, received: 0 }; map[wName].given++; }
+      if (tName) { if (!map[tName]) map[tName] = { given: 0, received: 0 }; map[tName].received++; }
+    });
   } catch (e) {
     Logger.log(`[buildPeerCountMap] 오류: ${e}`);
   }
@@ -433,16 +457,9 @@ function buildPeerCountMap() {
 // =============================================
 function getPeerStats(studentName, ban, modum) {
   try {
-    const ss = SpreadsheetApp.openById(SS_PEER);
-    const sheet = findSheet(ss, ['data', 'Data', '데이터']);
-    if (!sheet) return { error: 'data 시트 없음' };
+    const { header, rows, CONTENT_START } = loadDeduplicatedPeerRows();
+    if (!rows.length) return { given: null, received: null };
 
-    const rows = sheet.getDataRange().getValues();
-    if (rows.length < 2) return { given: null, received: null };
-
-    const header = rows[0];
-    // B=1, C=2, D=3, E=4, 내용=5~
-    const CONTENT_START = 5;
     const contentHeaders = [];
     for (let c = CONTENT_START; c < header.length; c++) {
       contentHeaders.push(String(header[c]).trim() || `${c + 1}열`);
@@ -450,23 +467,18 @@ function getPeerStats(studentName, ban, modum) {
 
     const normTarget = norm(studentName);
 
-    // 전체 집계 (순위 계산용)
-    const givenCharMap    = {}; // norm(이름) → 총글자수
+    const givenCharMap    = {};
     const receivedCharMap = {};
+    const givenItems      = [];
+    const receivedItems   = [];
 
-    // 이 학생의 아이템
-    const givenItems    = [];
-    const receivedItems = [];
+    rows.forEach(row => {
+      const wName = norm(row[1] || '');
+      const tName = norm(row[3] || '');
 
-    for (let i = 1; i < rows.length; i++) {
-      const row   = rows[i];
-      const wName = norm(row[1] || ''); // B
-      const tName = norm(row[3] || ''); // D
-
-      const contentText = contentHeaders
+      const charCount = contentHeaders
         .map((_, idx) => String(row[CONTENT_START + idx] || '').trim())
-        .join('');
-      const charCount = contentText.length;
+        .join('').length;
 
       if (wName) {
         givenCharMap[wName] = (givenCharMap[wName] || 0) + charCount;
@@ -475,8 +487,7 @@ function getPeerStats(studentName, ban, modum) {
             targetName: String(row[3] || '').trim(),
             targetId:   String(row[4] || '').trim(),
             contents: contentHeaders.map((h, idx) => ({
-              q: h,
-              a: String(row[CONTENT_START + idx] || '').trim()
+              q: h, a: String(row[CONTENT_START + idx] || '').trim()
             })).filter(c => c.a)
           });
         }
@@ -488,13 +499,12 @@ function getPeerStats(studentName, ban, modum) {
             writerName: String(row[1] || '').trim(),
             writerId:   String(row[2] || '').trim(),
             contents: contentHeaders.map((h, idx) => ({
-              q: h,
-              a: String(row[CONTENT_START + idx] || '').trim()
+              q: h, a: String(row[CONTENT_START + idx] || '').trim()
             })).filter(c => c.a)
           });
         }
       }
-    }
+    });
 
     // 학급 구성원 집합 (반 기준)
     const classNames = getClassMemberNorms(ban);
