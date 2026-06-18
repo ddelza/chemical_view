@@ -332,15 +332,15 @@ function getStudentLinks(studentName, ban, modum) {
       labels.push(c < header.length && header[c] ? header[c] : LINK_LABELS[c - LINK_COL_START] || `${c+1}열`);
     }
 
+    // 모둠별 매칭 (반 + 모둠으로 행 찾기)
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      const rName  = nameCol  >= 0 ? norm(row[nameCol])  : '';
-      const rBan   = banCol   >= 0 ? String(row[banCol]).trim()   : '';
-      const rModum = modumCol >= 0 ? String(row[modumCol]).trim() : '';
+      const rBan   = banCol   >= 0 ? norm(row[banCol])   : '';
+      const rModum = modumCol >= 0 ? norm(row[modumCol]) : '';
 
-      if (norm(studentName) !== rName) continue;
-      if (ban   && norm(rBan)   !== norm(ban))   continue;
-      if (modum && norm(rModum) !== norm(modum)) continue;
+      const banMatch   = !ban   || rBan   === norm(ban);
+      const modumMatch = !modum || rModum === norm(modum);
+      if (!banMatch || !modumMatch) continue;
 
       const links = [];
       for (let c = LINK_COL_START; c <= LINK_COL_END; c++) {
