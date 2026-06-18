@@ -146,16 +146,75 @@ function getAllStudents() {
 }
 
 // =============================================
-// 필터 조건으로 학생 목록 반환
+// 필터 조건으로 학생 목록 반환 (응답 수 포함)
 // =============================================
 function getFilteredStudents(ban, modum, name) {
   const all = getAllStudents();
-  return all.filter(s => {
+  const filtered = all.filter(s => {
     if (ban   && s.ban   !== ban)        return false;
     if (modum && s.modum !== modum)      return false;
     if (name  && !s.name.includes(name)) return false;
     return true;
   });
+
+  // 두 스프레드시트의 정리탭 응답 데이터를 미리 로드
+  const countMap = buildResponseCountMap();
+
+  return filtered.map(s => {
+    const key = norm(s.name);
+    const counts = countMap[key] || { booth: 0, inquiry: 0, boothTotal: 0, inquiryTotal: 0 };
+    return { ...s, counts };
+  });
+}
+
+// 이름 → {booth응답수, inquiry응답수} 맵 생성
+function buildResponseCountMap() {
+  const map = {};
+
+  const sources = [
+    { id: SS_BOOTH,   key: 'booth'   },
+    { id: SS_INQUIRY, key: 'inquiry' }
+  ];
+
+  sources.forEach(({ id, key }) => {
+    try {
+      const ss = SpreadsheetApp.openById(id);
+      const sheet = findSheet(ss, [RESPONSE_SHEET, '정리', '설문지 응답 시트1', 'Form Responses 1']);
+      if (!sheet) return;
+
+      const data = sheet.getDataRange().getValues();
+      if (data.length < 2) return;
+
+      const header = data[0].map(h => String(h).trim());
+      const nameCol = findColIndex(header, ['이름', '학생이름', '성명', '학생 이름', '이름을 입력', '이름 입력']);
+
+      // 유효 질문 열 수 계산
+      const validCols = [];
+      for (let c = RESPONSE_COL_START; c <= RESPONSE_COL_END; c++) {
+        const h = c < header.length ? header[c].trim() : '';
+        if (h) validCols.push(c);
+      }
+      const total = validCols.length || (RESPONSE_COL_END - RESPONSE_COL_START + 1);
+
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const rName = nameCol >= 0 ? norm(row[nameCol]) : '';
+        if (!rName) continue;
+
+        // 답변 있는 문항 수 (비어있지 않은 validCols)
+        const answered = validCols.filter(c => c < row.length && String(row[c]).trim() !== '').length;
+
+        if (!map[rName]) map[rName] = { booth: 0, inquiry: 0, boothTotal: total, inquiryTotal: total };
+        map[rName][`${key}Total`] = total;
+        // 여러 행 있으면 최댓값 사용
+        if (answered > (map[rName][key] || 0)) map[rName][key] = answered;
+      }
+    } catch (e) {
+      Logger.log(`[buildResponseCountMap] ${key} 오류: ${e}`);
+    }
+  });
+
+  return map;
 }
 
 // =============================================

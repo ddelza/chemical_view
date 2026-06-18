@@ -171,10 +171,41 @@
     font-weight: 600;
   }
 
+  .student-chip .chip-name {
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
   .student-chip .chip-meta {
     font-size: 0.72rem;
     opacity: 0.7;
     margin-top: 2px;
+  }
+
+  .chip-counts {
+    display: flex;
+    gap: 4px;
+    margin-top: 5px;
+    flex-wrap: wrap;
+  }
+
+  .count-tag {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 20px;
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .count-tag.incomplete {
+    background: #fff0f0;
+    color: #c62828;
+  }
+
+  .student-chip.selected .count-tag {
+    background: rgba(255,255,255,0.25);
+    color: white;
   }
 
   /* 결과 패널 */
@@ -457,7 +488,17 @@ function renderStudentList(students) {
     const chip = document.createElement('div');
     chip.className = 'student-chip';
     chip.dataset.key = key;
-    chip.innerHTML = `<div>${s.name}</div><div class="chip-meta">${s.ban ? s.ban + '반 ' : ''}${s.modum ? s.modum + '모둠' : ''}</div>`;
+
+    const c = s.counts || { booth: 0, inquiry: 0, boothTotal: 6, inquiryTotal: 6 };
+    const boothFull    = c.booth   >= (c.boothTotal   || 6);
+    const inquiryFull  = c.inquiry >= (c.inquiryTotal || 6);
+    const boothTag  = `<span class="count-tag${boothFull   ? '' : ' incomplete'}">부스 ${c.booth}/${c.boothTotal   || 6}</span>`;
+    const inquiryTag = `<span class="count-tag${inquiryFull ? '' : ' incomplete'}">탐구 ${c.inquiry}/${c.inquiryTotal || 6}</span>`;
+
+    chip.innerHTML = `
+      <div class="chip-name">${s.name}</div>
+      <div class="chip-meta">${s.ban ? s.ban + '반 ' : ''}${s.modum ? s.modum + '모둠' : ''}</div>
+      <div class="chip-counts">${boothTag}${inquiryTag}</div>`;
     chip.onclick = () => selectStudent(chip, s);
     grid.appendChild(chip);
   });
