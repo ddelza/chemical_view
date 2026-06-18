@@ -362,6 +362,98 @@
 
   .link-btn:hover { background: #3a7be0; }
 
+  /* 동료평가 칩 태그 */
+  .count-tag.peer-tag {
+    background: #f3e8ff;
+    color: #6b21a8;
+  }
+  .student-chip.selected .count-tag.peer-tag {
+    background: rgba(255,255,255,0.25);
+    color: white;
+  }
+
+  /* 동료평가 카드 */
+  .peer-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    margin-bottom: 20px;
+  }
+  .peer-card-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #555;
+    margin-bottom: 14px;
+  }
+  .peer-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 600px) { .peer-cols { grid-template-columns: 1fr; } }
+  .peer-col {
+    background: #fafafa;
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .peer-col-header {
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: inline-block;
+  }
+  .given-header    { background: #e0f2fe; color: #0369a1; }
+  .received-header { background: #fce7f3; color: #9d174d; }
+  .peer-stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    padding: 5px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .peer-stat-label { color: #666; }
+  .peer-stat-val   { font-weight: 600; color: #1a1a2e; }
+  .rank-badge {
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: #f0f4f8;
+    padding: 2px 8px;
+    border-radius: 12px;
+    color: #334;
+  }
+  .peer-items-toggle {
+    margin-top: 10px;
+    font-size: 0.78rem;
+    color: #4f8ef7;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .peer-items { margin-top: 8px; }
+  .peer-item {
+    background: white;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+    border: 1px solid #e8e8e8;
+  }
+  .peer-item-q {
+    font-weight: 700;
+    color: #4f8ef7;
+    margin: 6px 0 2px;
+    font-size: 0.78rem;
+  }
+  .peer-item-a {
+    color: #333;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .peer-no-item { color: #bbb; font-size: 0.82rem; padding: 4px 0; }
+
   .link-btn.disabled {
     background: #e8e8e8;
     color: #aaa;
@@ -445,6 +537,8 @@ function callApi(action, params) {
         runner.getStudentReflections(params.studentName, params.ban, params.modum);
       } else if (action === 'getStudentLinks') {
         runner.getStudentLinks(params.studentName, params.ban, params.modum);
+      } else if (action === 'getPeerStats') {
+        runner.getPeerStats(params.studentName, params.ban, params.modum);
       }
     } else {
       // 외부 — fetch API
@@ -537,13 +631,15 @@ function renderStudentList(students) {
     const c = s.counts || { booth: 0, inquiry: 0, boothTotal: 6, inquiryTotal: 6 };
     const boothFull    = c.booth   >= (c.boothTotal   || 6);
     const inquiryFull  = c.inquiry >= (c.inquiryTotal || 6);
-    const boothTag  = `<span class="count-tag${boothFull   ? '' : ' incomplete'}">부스 ${c.booth}/${c.boothTotal   || 6}</span>`;
+    const boothTag   = `<span class="count-tag${boothFull   ? '' : ' incomplete'}">부스 ${c.booth}/${c.boothTotal   || 6}</span>`;
     const inquiryTag = `<span class="count-tag${inquiryFull ? '' : ' incomplete'}">탐구 ${c.inquiry}/${c.inquiryTotal || 6}</span>`;
+    const p = s.peer || { given: 0, received: 0 };
+    const peerTag = `<span class="count-tag peer-tag">해준 ${p.given}·받은 ${p.received}</span>`;
 
     chip.innerHTML = `
       <div class="chip-name">${s.name}</div>
       <div class="chip-meta">${s.ban ? s.ban + '반 ' : ''}${s.modum ? s.modum + '모둠' : ''}</div>
-      <div class="chip-counts">${boothTag}${inquiryTag}</div>`;
+      <div class="chip-counts">${boothTag}${inquiryTag}${peerTag}</div>`;
     chip.onclick = () => selectStudent(chip, s);
     grid.appendChild(chip);
   });
@@ -564,16 +660,17 @@ function selectStudent(chip, student) {
 
   Promise.all([
     callApi('getStudentReflections', { studentName: student.name, ban: student.ban, modum: student.modum }),
-    callApi('getStudentLinks',       { studentName: student.name, ban: student.ban, modum: student.modum })
+    callApi('getStudentLinks',       { studentName: student.name, ban: student.ban, modum: student.modum }),
+    callApi('getPeerStats',          { studentName: student.name, ban: student.ban, modum: student.modum })
   ])
-    .then(([reflections, linksData]) => renderResult(student, reflections, linksData))
+    .then(([reflections, linksData, peerStats]) => renderResult(student, reflections, linksData, peerStats))
     .catch(err => {
       resultContent.innerHTML = '<div class="status-msg">오류: ' + (err.message || err) + '</div>';
     });
 }
 
 // ── 링크 + 성찰일지 통합 렌더링 ──────────────────────
-function renderResult(student, reflections, linksData) {
+function renderResult(student, reflections, linksData, peerStats) {
   const resultContent = document.getElementById('resultContent');
 
   let html = `<div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin-bottom:16px; padding-left:4px;">
@@ -602,7 +699,73 @@ function renderResult(student, reflections, linksData) {
   html += `</div></div>`;
 
   resultContent.innerHTML = html;
+  renderPeerStats(peerStats);
   renderReflections(student, reflections, true);
+}
+
+// ── 동료평가 렌더링 ───────────────────────────────────
+function renderPeerStats(ps) {
+  const resultContent = document.getElementById('resultContent');
+  if (!ps || ps.error) return;
+
+  const g = ps.given    || { count:0, charSum:0, schoolRank:'-', schoolTotal:'-', classRank:'-', classTotal:'-', items:[] };
+  const r = ps.received || { count:0, charSum:0, schoolRank:'-', schoolTotal:'-', classRank:'-', classTotal:'-', items:[] };
+
+  function statRow(label, val) {
+    return `<div class="peer-stat-row"><span class="peer-stat-label">${label}</span><span class="peer-stat-val">${val}</span></div>`;
+  }
+  function rankBadge(rank, total) {
+    if (rank === null || rank === undefined || rank === '-') return `<span class="rank-badge">-</span>`;
+    return `<span class="rank-badge">${rank}위 / ${total}명</span>`;
+  }
+
+  // 해준/받은 개별 항목 렌더링
+  function itemsHtml(items, mode) {
+    if (!items || items.length === 0) return `<div class="peer-no-item">항목 없음</div>`;
+    return items.map(item => {
+      const who = mode === 'given'
+        ? `→ <strong>${item.targetName}</strong>${item.targetId ? ' (' + item.targetId + ')' : ''}`
+        : `← <strong>${item.writerName}</strong>${item.writerId ? ' (' + item.writerId + ')' : ''}`;
+      const body = item.contents.map(c =>
+        `<div class="peer-item-q">${c.q}</div><div class="peer-item-a">${c.a}</div>`
+      ).join('');
+      return `<div class="peer-item">${who}${body}</div>`;
+    }).join('');
+  }
+
+  const html = `
+  <div class="peer-card">
+    <div class="peer-card-title">🤝 동료평가</div>
+    <div class="peer-cols">
+      <div class="peer-col">
+        <div class="peer-col-header given-header">해준 동료평가</div>
+        ${statRow('횟수', g.count + '건')}
+        ${statRow('글자수 합', g.charSum.toLocaleString() + '자')}
+        ${statRow('학급 순위', rankBadge(g.classRank, g.classTotal))}
+        ${statRow('전교 순위', rankBadge(g.schoolRank, g.schoolTotal))}
+        <div class="peer-items-toggle" onclick="toggleItems(this)">▶ 내용 펼치기</div>
+        <div class="peer-items" style="display:none">${itemsHtml(g.items, 'given')}</div>
+      </div>
+      <div class="peer-col">
+        <div class="peer-col-header received-header">받은 동료평가</div>
+        ${statRow('횟수', r.count + '건')}
+        ${statRow('글자수 합', r.charSum.toLocaleString() + '자')}
+        ${statRow('학급 순위', rankBadge(r.classRank, r.classTotal))}
+        ${statRow('전교 순위', rankBadge(r.schoolRank, r.schoolTotal))}
+        <div class="peer-items-toggle" onclick="toggleItems(this)">▶ 내용 펼치기</div>
+        <div class="peer-items" style="display:none">${itemsHtml(r.items, 'received')}</div>
+      </div>
+    </div>
+  </div>`;
+
+  resultContent.insertAdjacentHTML('beforeend', html);
+}
+
+function toggleItems(btn) {
+  const items = btn.nextElementSibling;
+  const open = items.style.display !== 'none';
+  items.style.display = open ? 'none' : 'block';
+  btn.textContent = (open ? '▶' : '▼') + ' 내용 ' + (open ? '펼치기' : '접기');
 }
 
 // ── 결과 렌더링 ───────────────────────────────────────

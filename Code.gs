@@ -4,6 +4,7 @@
 const SS_BOOTH = '1avD0D72BhxP7aZfM0BO7Y4xc2B7UWrT9U5o5S6fG2tU';
 const SS_INQUIRY = '1JJy80Ah9NaJN_BNk21Nyb7P3dtli5OFtR2AfMNgPkb4';
 const SS_LINKS = '1ENuXr_ibmRNeUlAGjQLwh3Vs5zLP5hCCNy_hDEgFb-0'; // 계획서/보고서/캔바/상호작용 링크
+const SS_PEER = '1WItERzz5PtYV-T3BGTE7Dfh2N951qWMbn3iKz65T5-w';  // 동료평가
 
 const STUDENT_INFO_SHEET = '학생 정보';
 const RESPONSE_SHEET = '정리';
@@ -45,6 +46,12 @@ function doGet(e) {
       );
     } else if (action === 'getStudentLinks') {
       data = getStudentLinks(
+        e.parameter.studentName || '',
+        e.parameter.ban         || '',
+        e.parameter.modum       || ''
+      );
+    } else if (action === 'getPeerStats') {
+      data = getPeerStats(
         e.parameter.studentName || '',
         e.parameter.ban         || '',
         e.parameter.modum       || ''
@@ -164,13 +171,14 @@ function getFilteredStudents(ban, modum, name) {
     return true;
   });
 
-  // 두 스프레드시트의 정리탭 응답 데이터를 미리 로드
   const countMap = buildResponseCountMap();
+  const peerMap  = buildPeerCountMap();
 
   return filtered.map(s => {
     const key = norm(s.name);
     const counts = countMap[key] || { booth: 0, inquiry: 0, boothTotal: 0, inquiryTotal: 0 };
-    return { ...s, counts };
+    const peer   = peerMap[key]  || { given: 0, received: 0 };
+    return { ...s, counts, peer };
   });
 }
 
@@ -388,4 +396,174 @@ function findColIndex(header, candidates) {
 
 function naturalSort(a, b) {
   return a.localeCompare(b, 'ko', { numeric: true });
+}
+
+// =============================================
+// 동료평가 — 칩용 횟수 맵 (이름 → {given, received})
+// =============================================
+function buildPeerCountMap() {
+  const map = {};
+  try {
+    const ss = SpreadsheetApp.openById(SS_PEER);
+    const sheet = findSheet(ss, ['data', 'Data', '데이터']);
+    if (!sheet) return map;
+
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const wName = norm(row[1] || ''); // B열
+      const tName = norm(row[3] || ''); // D열
+      if (wName) {
+        if (!map[wName]) map[wName] = { given: 0, received: 0 };
+        map[wName].given++;
+      }
+      if (tName) {
+        if (!map[tName]) map[tName] = { given: 0, received: 0 };
+        map[tName].received++;
+      }
+    }
+  } catch (e) {
+    Logger.log(`[buildPeerCountMap] 오류: ${e}`);
+  }
+  return map;
+}
+
+// =============================================
+// 동료평가 — 상세 통계 (해준/받은 횟수·글자수·순위 + 내용)
+// =============================================
+function getPeerStats(studentName, ban, modum) {
+  try {
+    const ss = SpreadsheetApp.openById(SS_PEER);
+    const sheet = findSheet(ss, ['data', 'Data', '데이터']);
+    if (!sheet) return { error: 'data 시트 없음' };
+
+    const rows = sheet.getDataRange().getValues();
+    if (rows.length < 2) return { given: null, received: null };
+
+    const header = rows[0];
+    // B=1, C=2, D=3, E=4, 내용=5~
+    const CONTENT_START = 5;
+    const contentHeaders = [];
+    for (let c = CONTENT_START; c < header.length; c++) {
+      contentHeaders.push(String(header[c]).trim() || `${c + 1}열`);
+    }
+
+    const normTarget = norm(studentName);
+
+    // 전체 집계 (순위 계산용)
+    const givenCharMap    = {}; // norm(이름) → 총글자수
+    const receivedCharMap = {};
+
+    // 이 학생의 아이템
+    const givenItems    = [];
+    const receivedItems = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row   = rows[i];
+      const wName = norm(row[1] || ''); // B
+      const tName = norm(row[3] || ''); // D
+
+      const contentText = contentHeaders
+        .map((_, idx) => String(row[CONTENT_START + idx] || '').trim())
+        .join('');
+      const charCount = contentText.length;
+
+      if (wName) {
+        givenCharMap[wName] = (givenCharMap[wName] || 0) + charCount;
+        if (wName === normTarget) {
+          givenItems.push({
+            targetName: String(row[3] || '').trim(),
+            targetId:   String(row[4] || '').trim(),
+            contents: contentHeaders.map((h, idx) => ({
+              q: h,
+              a: String(row[CONTENT_START + idx] || '').trim()
+            })).filter(c => c.a)
+          });
+        }
+      }
+      if (tName) {
+        receivedCharMap[tName] = (receivedCharMap[tName] || 0) + charCount;
+        if (tName === normTarget) {
+          receivedItems.push({
+            writerName: String(row[1] || '').trim(),
+            writerId:   String(row[2] || '').trim(),
+            contents: contentHeaders.map((h, idx) => ({
+              q: h,
+              a: String(row[CONTENT_START + idx] || '').trim()
+            })).filter(c => c.a)
+          });
+        }
+      }
+    }
+
+    // 학급 구성원 집합 (반 기준)
+    const classNames = getClassMemberNorms(ban);
+
+    const schoolGivenTotal    = Object.keys(givenCharMap).length;
+    const schoolReceivedTotal = Object.keys(receivedCharMap).length;
+
+    return {
+      given: {
+        count:       givenItems.length,
+        charSum:     givenCharMap[normTarget] || 0,
+        schoolRank:  computeRank(givenCharMap, normTarget),
+        schoolTotal: schoolGivenTotal,
+        classRank:   computeRankFiltered(givenCharMap, normTarget, classNames),
+        classTotal:  classNames.size,
+        items:       givenItems
+      },
+      received: {
+        count:       receivedItems.length,
+        charSum:     receivedCharMap[normTarget] || 0,
+        schoolRank:  computeRank(receivedCharMap, normTarget),
+        schoolTotal: schoolReceivedTotal,
+        classRank:   computeRankFiltered(receivedCharMap, normTarget, classNames),
+        classTotal:  classNames.size,
+        items:       receivedItems
+      }
+    };
+  } catch (e) {
+    Logger.log(`[getPeerStats] 오류: ${e}`);
+    return { error: e.toString() };
+  }
+}
+
+// 동일 반 학생 norm(이름) 집합 반환
+function getClassMemberNorms(ban) {
+  const names = new Set();
+  if (!ban) return names;
+  [SS_BOOTH, SS_INQUIRY].forEach(id => {
+    try {
+      const ss    = SpreadsheetApp.openById(id);
+      const sheet = findSheet(ss, [STUDENT_INFO_SHEET]);
+      if (!sheet) return;
+      const data   = sheet.getDataRange().getValues();
+      const header = data[0].map(h => String(h).trim());
+      const banCol  = findColIndex(header, ['반', '학반', '학년반', '학년/반']);
+      const nameCol = findColIndex(header, ['이름', '학생이름', '성명', '학생 이름']);
+      for (let i = 1; i < data.length; i++) {
+        const rBan  = banCol  >= 0 ? String(data[i][banCol]).trim()  : '';
+        const rName = nameCol >= 0 ? String(data[i][nameCol]).trim() : '';
+        if (rName && rBan === ban) names.add(norm(rName));
+      }
+    } catch (e) {}
+  });
+  return names;
+}
+
+// 전체 순위 (값 높을수록 1위)
+function computeRank(charMap, targetName) {
+  const myVal = charMap[targetName] || 0;
+  return Object.values(charMap).filter(v => v > myVal).length + 1;
+}
+
+// 특정 이름 집합 내 순위
+function computeRankFiltered(charMap, targetName, nameSet) {
+  if (!nameSet.size) return null;
+  const myVal = charMap[targetName] || 0;
+  let rank = 1;
+  nameSet.forEach(n => {
+    if (n !== targetName && (charMap[n] || 0) > myVal) rank++;
+  });
+  return rank;
 }
