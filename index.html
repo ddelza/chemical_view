@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>성찰일지 뷰어</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+    background: #f0f4f8;
+    color: #1a1a2e;
+    min-height: 100vh;
+  }
+
+  header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: white;
+    padding: 24px 32px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  header p {
+    font-size: 0.85rem;
+    opacity: 0.7;
+    margin-top: 4px;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }
+
+  /* 검색 패널 */
+  .search-panel {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    margin-bottom: 24px;
+  }
+
+  .search-panel h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #333;
+  }
+
+  .filter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 2fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  @media (max-width: 600px) {
+    .filter-row { grid-template-columns: 1fr 1fr; }
+    .filter-row .name-wrap { grid-column: 1 / -1; }
+  }
+
+  label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 5px;
+  }
+
+  select, input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    background: #fafafa;
+    color: #1a1a2e;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  select:focus, input:focus {
+    border-color: #4f8ef7;
+    background: white;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    padding: 11px 28px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.92rem;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: #4f8ef7;
+    color: white;
+  }
+
+  .btn-primary:hover { background: #3a7be0; }
+  .btn-primary:disabled { background: #b0c8f7; cursor: default; }
+
+  .btn-secondary {
+    background: #f0f0f0;
+    color: #444;
+  }
+
+  .btn-secondary:hover { background: #e0e0e0; }
+
+  /* 학생 목록 */
+  .student-list-panel {
+    background: white;
+    border-radius: 16px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    margin-bottom: 24px;
+    display: none;
+  }
+
+  .student-list-panel h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+  }
+
+  .student-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+  }
+
+  .student-chip {
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1.5px solid #e0e7ff;
+    background: #f5f7ff;
+    cursor: pointer;
+    font-size: 0.88rem;
+    color: #334;
+    transition: all 0.15s;
+    text-align: center;
+  }
+
+  .student-chip:hover {
+    border-color: #4f8ef7;
+    background: #e8f0fe;
+    color: #1a1a2e;
+  }
+
+  .student-chip.selected {
+    border-color: #4f8ef7;
+    background: #4f8ef7;
+    color: white;
+    font-weight: 600;
+  }
+
+  .student-chip .chip-meta {
+    font-size: 0.72rem;
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+
+  /* 결과 패널 */
+  .result-panel {
+    display: none;
+  }
+
+  .reflection-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    margin-bottom: 20px;
+  }
+
+  .reflection-card .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 2px solid #f0f4f8;
+  }
+
+  .source-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .badge-booth {
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  .badge-inquiry {
+    background: #e8f5e9;
+    color: #1b5e20;
+  }
+
+  .card-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a1a2e;
+  }
+
+  .qa-item {
+    margin-bottom: 18px;
+  }
+
+  .qa-item:last-child { margin-bottom: 0; }
+
+  .question {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #4f8ef7;
+    margin-bottom: 6px;
+    padding-left: 4px;
+    border-left: 3px solid #4f8ef7;
+    line-height: 1.4;
+  }
+
+  .answer {
+    font-size: 0.92rem;
+    color: #2c2c2c;
+    line-height: 1.7;
+    background: #f8faff;
+    border-radius: 8px;
+    padding: 12px 14px;
+    white-space: pre-wrap;
+  }
+
+  .answer.empty {
+    color: #aaa;
+    font-style: italic;
+  }
+
+  .multi-response-notice {
+    font-size: 0.78rem;
+    color: #888;
+    margin-bottom: 10px;
+  }
+
+  .response-divider {
+    border: none;
+    border-top: 1px dashed #ddd;
+    margin: 14px 0;
+  }
+
+  /* 상태 메시지 */
+  .status-msg {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+    font-size: 0.9rem;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    border: 3px solid #e0e7ff;
+    border-top-color: #4f8ef7;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .no-result {
+    text-align: center;
+    padding: 30px;
+    color: #bbb;
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📋 성찰일지 뷰어</h1>
+  <p>부스 운영 및 과학 전시 · 탐구 과정 성찰일지 통합 검색</p>
+</header>
+
+<div class="container">
+
+  <!-- 검색 패널 -->
+  <div class="search-panel">
+    <h2>학생 검색</h2>
+    <div class="filter-row">
+      <div>
+        <label>반</label>
+        <select id="selBan">
+          <option value="">전체</option>
+        </select>
+      </div>
+      <div>
+        <label>모둠</label>
+        <select id="selModum">
+          <option value="">전체</option>
+        </select>
+      </div>
+      <div class="name-wrap">
+        <label>이름 (일부 입력 가능)</label>
+        <input type="text" id="inpName" placeholder="예: 김민준" />
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnSearch" onclick="searchStudents()">검색</button>
+      <button class="btn btn-secondary" onclick="resetAll()">초기화</button>
+    </div>
+  </div>
+
+  <!-- 학생 목록 -->
+  <div class="student-list-panel" id="studentListPanel">
+    <h2 id="studentListTitle">검색 결과</h2>
+    <div class="student-grid" id="studentGrid"></div>
+  </div>
+
+  <!-- 성찰일지 결과 -->
+  <div class="result-panel" id="resultPanel">
+    <div id="resultContent"></div>
+  </div>
+
+</div>
+
+<script>
+let allStudents = [];
+let selectedStudent = null;
+
+// 페이지 로드 시 필터 옵션 초기화
+window.onload = function() {
+  google.script.run
+    .withSuccessHandler(function(opts) {
+      const banSel = document.getElementById('selBan');
+      opts.bans.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b; opt.textContent = b + '반';
+        banSel.appendChild(opt);
+      });
+      const modumSel = document.getElementById('selModum');
+      opts.modums.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m; opt.textContent = m + '모둠';
+        modumSel.appendChild(opt);
+      });
+    })
+    .withFailureHandler(console.error)
+    .getFilterOptions();
+
+  document.getElementById('inpName').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') searchStudents();
+  });
+};
+
+function searchStudents() {
+  const ban   = document.getElementById('selBan').value;
+  const modum = document.getElementById('selModum').value;
+  const name  = document.getElementById('inpName').value.trim();
+
+  const panel = document.getElementById('studentListPanel');
+  const grid  = document.getElementById('studentGrid');
+
+  grid.innerHTML = '<div class="status-msg"><span class="spinner"></span>검색 중...</div>';
+  panel.style.display = 'block';
+  document.getElementById('resultPanel').style.display = 'none';
+
+  document.getElementById('btnSearch').disabled = true;
+
+  google.script.run
+    .withSuccessHandler(function(students) {
+      document.getElementById('btnSearch').disabled = false;
+      allStudents = students;
+      renderStudentList(students);
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById('btnSearch').disabled = false;
+      grid.innerHTML = '<div class="status-msg">오류가 발생했습니다: ' + err.message + '</div>';
+    })
+    .getFilteredStudents(ban, modum, name);
+}
+
+function renderStudentList(students) {
+  const grid = document.getElementById('studentGrid');
+  const title = document.getElementById('studentListTitle');
+
+  title.textContent = `검색 결과 (${students.length}명)`;
+
+  if (students.length === 0) {
+    grid.innerHTML = '<div class="no-result">검색 결과가 없습니다.</div>';
+    return;
+  }
+
+  // 중복 이름 제거 (두 스프레드시트에 동일 학생이 있을 수 있음)
+  const seen = new Map();
+  students.forEach(s => {
+    const key = s.ban + '_' + s.modum + '_' + s.name;
+    if (!seen.has(key)) seen.set(key, s);
+  });
+
+  grid.innerHTML = '';
+  seen.forEach((s, key) => {
+    const chip = document.createElement('div');
+    chip.className = 'student-chip';
+    chip.dataset.key = key;
+    chip.innerHTML = `<div>${s.name}</div><div class="chip-meta">${s.ban ? s.ban + '반 ' : ''}${s.modum ? s.modum + '모둠' : ''}</div>`;
+    chip.onclick = () => selectStudent(chip, s);
+    grid.appendChild(chip);
+  });
+}
+
+function selectStudent(chip, student) {
+  document.querySelectorAll('.student-chip').forEach(c => c.classList.remove('selected'));
+  chip.classList.add('selected');
+  selectedStudent = student;
+
+  const resultPanel = document.getElementById('resultPanel');
+  const resultContent = document.getElementById('resultContent');
+
+  resultPanel.style.display = 'block';
+  resultContent.innerHTML = '<div class="status-msg"><span class="spinner"></span>성찰일지 불러오는 중...</div>';
+
+  resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  google.script.run
+    .withSuccessHandler(function(reflections) {
+      renderReflections(student, reflections);
+    })
+    .withFailureHandler(function(err) {
+      resultContent.innerHTML = '<div class="status-msg">오류: ' + err.message + '</div>';
+    })
+    .getStudentReflections(student.name, student.ban, student.modum);
+}
+
+function renderReflections(student, reflections) {
+  const resultContent = document.getElementById('resultContent');
+
+  if (!reflections || reflections.length === 0) {
+    resultContent.innerHTML = `
+      <div class="reflection-card">
+        <div class="no-result">
+          <strong>${student.name}</strong> 학생의 성찰일지 응답이 없습니다.<br>
+          <small style="color:#bbb; margin-top:6px; display:block;">설문지 응답 시트1의 K~P열을 확인해 주세요.</small>
+        </div>
+      </div>`;
+    return;
+  }
+
+  let html = `<div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin-bottom:16px; padding-left:4px;">
+    ${student.name} 학생의 성찰일지
+    ${student.ban  ? `<span style="font-size:0.82rem; font-weight:400; color:#888; margin-left:8px;">${student.ban}반</span>` : ''}
+    ${student.modum ? `<span style="font-size:0.82rem; font-weight:400; color:#888;">${student.modum}모둠</span>` : ''}
+  </div>`;
+
+  reflections.forEach(ref => {
+    const badgeClass = ref.source.includes('탐구') ? 'badge-inquiry' : 'badge-booth';
+    html += `<div class="reflection-card">
+      <div class="card-header">
+        <span class="source-badge ${badgeClass}">${ref.source}</span>
+      </div>`;
+
+    if (ref.responses.length > 1) {
+      html += `<div class="multi-response-notice">※ 응답 ${ref.responses.length}건이 있습니다.</div>`;
+    }
+
+    ref.responses.forEach((resp, ri) => {
+      if (ri > 0) html += '<hr class="response-divider">';
+      if (resp.timestamp) {
+        html += `<div style="font-size:0.75rem; color:#aaa; margin-bottom:12px;">제출: ${resp.timestamp}</div>`;
+      }
+      ref.questions.forEach((q, qi) => {
+        const answer = resp.answers[qi] || '';
+        html += `<div class="qa-item">
+          <div class="question">Q${qi + 1}. ${q}</div>
+          <div class="answer${answer ? '' : ' empty'}">${answer || '(미응답)'}</div>
+        </div>`;
+      });
+    });
+
+    html += `</div>`;
+  });
+
+  resultContent.innerHTML = html;
+}
+
+function resetAll() {
+  document.getElementById('selBan').value = '';
+  document.getElementById('selModum').value = '';
+  document.getElementById('inpName').value = '';
+  document.getElementById('studentListPanel').style.display = 'none';
+  document.getElementById('resultPanel').style.display = 'none';
+  allStudents = [];
+  selectedStudent = null;
+}
+</script>
+</body>
+</html>
