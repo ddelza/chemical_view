@@ -346,13 +346,50 @@
 </div>
 
 <script>
+// Apps Script 웹앱 URL — GitHub Pages에서 호출할 때 사용
+// Apps Script 내부에서 서빙될 때는 google.script.run 을 자동으로 사용
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzG5S4_CoswxtkMxs4x3RLb2GaSP47HyoarSRF4159qUkYveGmO3VGf6R86aBTLIp0Yug/exec';
+
 let allStudents = [];
 let selectedStudent = null;
 
-// 페이지 로드 시 필터 옵션 초기화
+// ── API 호출 통합 레이어 ──────────────────────────────
+// Apps Script 내부: google.script.run 사용
+// 외부(GitHub Pages 등): fetch로 Apps Script URL 호출
+function callApi(action, params) {
+  return new Promise((resolve, reject) => {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      // Apps Script 내부
+      const runner = google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject);
+      if (action === 'getFilterOptions') {
+        runner.getFilterOptions();
+      } else if (action === 'getFilteredStudents') {
+        runner.getFilteredStudents(params.ban, params.modum, params.name);
+      } else if (action === 'getStudentReflections') {
+        runner.getStudentReflections(params.studentName, params.ban, params.modum);
+      }
+    } else {
+      // 외부 — fetch API
+      const url = new URL(APPS_SCRIPT_URL);
+      url.searchParams.set('action', action);
+      if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+      fetch(url.toString())
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.error) reject(new Error(data.error));
+          else resolve(data);
+        })
+        .catch(reject);
+    }
+  });
+}
+
+// ── 초기화 ────────────────────────────────────────────
 window.onload = function() {
-  google.script.run
-    .withSuccessHandler(function(opts) {
+  callApi('getFilterOptions')
+    .then(function(opts) {
       const banSel = document.getElementById('selBan');
       opts.bans.forEach(b => {
         const opt = document.createElement('option');
@@ -366,14 +403,14 @@ window.onload = function() {
         modumSel.appendChild(opt);
       });
     })
-    .withFailureHandler(console.error)
-    .getFilterOptions();
+    .catch(console.error);
 
   document.getElementById('inpName').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') searchStudents();
   });
 };
 
+// ── 검색 ─────────────────────────────────────────────
 function searchStudents() {
   const ban   = document.getElementById('selBan').value;
   const modum = document.getElementById('selModum').value;
@@ -385,26 +422,23 @@ function searchStudents() {
   grid.innerHTML = '<div class="status-msg"><span class="spinner"></span>검색 중...</div>';
   panel.style.display = 'block';
   document.getElementById('resultPanel').style.display = 'none';
-
   document.getElementById('btnSearch').disabled = true;
 
-  google.script.run
-    .withSuccessHandler(function(students) {
+  callApi('getFilteredStudents', { ban, modum, name })
+    .then(function(students) {
       document.getElementById('btnSearch').disabled = false;
       allStudents = students;
       renderStudentList(students);
     })
-    .withFailureHandler(function(err) {
+    .catch(function(err) {
       document.getElementById('btnSearch').disabled = false;
-      grid.innerHTML = '<div class="status-msg">오류가 발생했습니다: ' + err.message + '</div>';
-    })
-    .getFilteredStudents(ban, modum, name);
+      grid.innerHTML = '<div class="status-msg">오류: ' + (err.message || err) + '</div>';
+    });
 }
 
 function renderStudentList(students) {
-  const grid = document.getElementById('studentGrid');
+  const grid  = document.getElementById('studentGrid');
   const title = document.getElementById('studentListTitle');
-
   title.textContent = `검색 결과 (${students.length}명)`;
 
   if (students.length === 0) {
@@ -412,7 +446,6 @@ function renderStudentList(students) {
     return;
   }
 
-  // 중복 이름 제거 (두 스프레드시트에 동일 학생이 있을 수 있음)
   const seen = new Map();
   students.forEach(s => {
     const key = s.ban + '_' + s.modum + '_' + s.name;
@@ -430,29 +463,31 @@ function renderStudentList(students) {
   });
 }
 
+// ── 학생 선택 ─────────────────────────────────────────
 function selectStudent(chip, student) {
   document.querySelectorAll('.student-chip').forEach(c => c.classList.remove('selected'));
   chip.classList.add('selected');
   selectedStudent = student;
 
-  const resultPanel = document.getElementById('resultPanel');
+  const resultPanel   = document.getElementById('resultPanel');
   const resultContent = document.getElementById('resultContent');
 
   resultPanel.style.display = 'block';
   resultContent.innerHTML = '<div class="status-msg"><span class="spinner"></span>성찰일지 불러오는 중...</div>';
-
   resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  google.script.run
-    .withSuccessHandler(function(reflections) {
-      renderReflections(student, reflections);
-    })
-    .withFailureHandler(function(err) {
-      resultContent.innerHTML = '<div class="status-msg">오류: ' + err.message + '</div>';
-    })
-    .getStudentReflections(student.name, student.ban, student.modum);
+  callApi('getStudentReflections', {
+    studentName: student.name,
+    ban: student.ban,
+    modum: student.modum
+  })
+    .then(reflections => renderReflections(student, reflections))
+    .catch(err => {
+      resultContent.innerHTML = '<div class="status-msg">오류: ' + (err.message || err) + '</div>';
+    });
 }
 
+// ── 결과 렌더링 ───────────────────────────────────────
 function renderReflections(student, reflections) {
   const resultContent = document.getElementById('resultContent');
 
@@ -469,7 +504,7 @@ function renderReflections(student, reflections) {
 
   let html = `<div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin-bottom:16px; padding-left:4px;">
     ${student.name} 학생의 성찰일지
-    ${student.ban  ? `<span style="font-size:0.82rem; font-weight:400; color:#888; margin-left:8px;">${student.ban}반</span>` : ''}
+    ${student.ban   ? `<span style="font-size:0.82rem; font-weight:400; color:#888; margin-left:8px;">${student.ban}반</span>`   : ''}
     ${student.modum ? `<span style="font-size:0.82rem; font-weight:400; color:#888;">${student.modum}모둠</span>` : ''}
   </div>`;
 
@@ -505,12 +540,12 @@ function renderReflections(student, reflections) {
 }
 
 function resetAll() {
-  document.getElementById('selBan').value = '';
+  document.getElementById('selBan').value   = '';
   document.getElementById('selModum').value = '';
-  document.getElementById('inpName').value = '';
+  document.getElementById('inpName').value  = '';
   document.getElementById('studentListPanel').style.display = 'none';
-  document.getElementById('resultPanel').style.display = 'none';
-  allStudents = [];
+  document.getElementById('resultPanel').style.display      = 'none';
+  allStudents     = [];
   selectedStudent = null;
 }
 </script>
