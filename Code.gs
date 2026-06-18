@@ -4,7 +4,9 @@
 const SS_BOOTH = '1avD0D72BhxP7aZfM0BO7Y4xc2B7UWrT9U5o5S6fG2tU';
 const SS_INQUIRY = '1JJy80Ah9NaJN_BNk21Nyb7P3dtli5OFtR2AfMNgPkb4';
 const SS_LINKS = '1ENuXr_ibmRNeUlAGjQLwh3Vs5zLP5hCCNy_hDEgFb-0'; // 계획서/보고서/캔바/상호작용 링크
-const SS_PEER = '1WItERzz5PtYV-T3BGTE7Dfh2N951qWMbn3iKz65T5-w';  // 동료평가
+const SS_PEER     = '1WItERzz5PtYV-T3BGTE7Dfh2N951qWMbn3iKz65T5-w';  // 동료평가
+const SS_PASSWORD = '1JcgoufQUypJR6ItEBGWR7xVE-e1vBqXqfYddkEgXlJg';  // 학생 비밀번호
+const SS_GRADING  = SS_INQUIRY; // 채점탭이 탐구 스프레드시트에 있음
 
 const STUDENT_INFO_SHEET = '학생 정보';
 const RESPONSE_SHEET = '정리';
@@ -20,8 +22,13 @@ const RESPONSE_COL_END = 15;
 function doGet(e) {
   const action = e && e.parameter && e.parameter.action;
 
+  const page = e && e.parameter && e.parameter.page;
   if (!action) {
-    // 기본: HTML 반환
+    if (page === 'student') {
+      return HtmlService.createHtmlOutputFromFile('student')
+        .setTitle('내 학습 현황')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    }
     return HtmlService.createHtmlOutputFromFile('index')
       .setTitle('성찰일지 뷰어')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -49,6 +56,19 @@ function doGet(e) {
         e.parameter.studentName || '',
         e.parameter.ban         || '',
         e.parameter.modum       || ''
+      );
+    } else if (action === 'verifyStudent') {
+      data = verifyStudent(
+        e.parameter.ban      || '',
+        e.parameter.num      || '',
+        e.parameter.name     || '',
+        e.parameter.password || ''
+      );
+    } else if (action === 'getMyData') {
+      data = getMyData(
+        e.parameter.ban   || '',
+        e.parameter.num   || '',
+        e.parameter.name  || ''
       );
     } else if (action === 'getPeerStats') {
       data = getPeerStats(
@@ -576,4 +596,153 @@ function computeRankFiltered(charMap, targetName, nameSet) {
     if (n !== targetName && (charMap[n] || 0) > myVal) rank++;
   });
   return rank;
+}
+
+// =============================================
+// 학생 포털 — 비밀번호 검증
+// =============================================
+function verifyStudent(ban, num, name, password) {
+  try {
+    const ss    = SpreadsheetApp.openById(SS_PASSWORD);
+    const sheet = ss.getSheets()[0];
+    const data  = sheet.getDataRange().getValues();
+    const header = data[0].map(h => String(h).trim());
+
+    const banCol  = findColIndex(header, ['반', '학반', '학년반']);
+    const numCol  = findColIndex(header, ['번호', '학번', '출석번호', '번']);
+    const nameCol = findColIndex(header, ['이름', '성명', '학생이름']);
+    const pwCol   = findColIndex(header, ['비밀번호', '패스워드', 'password', 'pw']);
+
+    for (let i = 1; i < data.length; i++) {
+      const row  = data[i];
+      const rBan  = banCol  >= 0 ? norm(row[banCol])  : '';
+      const rNum  = numCol  >= 0 ? norm(row[numCol])  : '';
+      const rName = nameCol >= 0 ? norm(row[nameCol]) : '';
+      const rPw   = pwCol   >= 0 ? String(row[pwCol]).trim() : '';
+
+      if (rBan === norm(ban) && rNum === norm(num) && rName === norm(name)) {
+        if (rPw === password.trim()) return { ok: true };
+        else return { ok: false, reason: '비밀번호가 일치하지 않습니다.' };
+      }
+    }
+    return { ok: false, reason: '학생 정보를 찾을 수 없습니다.' };
+  } catch (e) {
+    return { ok: false, reason: '오류: ' + e.toString() };
+  }
+}
+
+// =============================================
+// 학생 포털 — 내 데이터 통합 조회
+// (성찰일지 + 링크 + 동료평가 익명 + 점수)
+// =============================================
+function getMyData(ban, num, name) {
+  // 학생 정보에서 모둠 찾기
+  let modum = '';
+  [SS_BOOTH, SS_INQUIRY].forEach(id => {
+    if (modum) return;
+    try {
+      const ss    = SpreadsheetApp.openById(id);
+      const sheet = findSheet(ss, [STUDENT_INFO_SHEET]);
+      if (!sheet) return;
+      const data   = sheet.getDataRange().getValues();
+      const header = data[0].map(h => String(h).trim());
+      const banCol   = findColIndex(header, ['반', '학반', '학년반']);
+      const numCol   = findColIndex(header, ['번호', '학번', '출석번호']);
+      const nameCol  = findColIndex(header, ['이름', '성명', '학생이름']);
+      const modumCol = findColIndex(header, ['모둠', '모둠번호', '그룹']);
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        if (norm(row[nameCol]) === norm(name) &&
+            (!ban || norm(row[banCol]) === norm(ban))) {
+          modum = modumCol >= 0 ? String(row[modumCol]).trim() : '';
+          break;
+        }
+      }
+    } catch (e) {}
+  });
+
+  // 성찰일지
+  const reflections = getStudentReflections(name, ban, modum);
+
+  // 링크
+  const linksData = getStudentLinks(name, ban, modum);
+
+  // 동료평가 (받은 것 익명 처리)
+  const peerRaw = getPeerStats(name, ban, modum);
+  const peer = peerRaw;
+  if (peer && peer.received && peer.received.items) {
+    peer.received.items = peer.received.items.map(item => ({
+      ...item,
+      writerName: '익명',
+      writerId:   ''
+    }));
+  }
+
+  // 점수
+  const scores = getStudentScore(ban, num, name);
+
+  return { reflections, linksData, peer, scores, modum };
+}
+
+// =============================================
+// 학생 포털 — 채점탭에서 점수 조회
+// =============================================
+function getStudentScore(ban, num, name) {
+  try {
+    const ss    = SpreadsheetApp.openById(SS_GRADING);
+    const sheet = findSheet(ss, ['채점', '점수', 'Score', 'score']);
+    if (!sheet) return null;
+
+    const data   = sheet.getDataRange().getValues();
+    const header = data[0].map(h => String(h).trim());
+
+    const banCol  = findColIndex(header, ['반', '학반', '학년반']);
+    const numCol  = findColIndex(header, ['번호', '학번', '출석번호', '번']);
+    const nameCol = findColIndex(header, ['이름', '성명', '학생이름']);
+
+    // 점수 컬럼 탐지
+    const scoreKeys = {
+      plan:   findColIndex(header, ['계획서']),
+      report: findColIndex(header, ['보고서']),
+      booth:  findColIndex(header, ['부스준비', '부스 준비', '캔바', '부스']),
+      peer:   findColIndex(header, ['동료평가', '동료 평가']),
+      inquiry:findColIndex(header, ['탐구성찰', '탐구 성찰']),
+      booth2: findColIndex(header, ['부스성찰', '부스 성찰']),
+      total:  findColIndex(header, ['합계', '총점', '최종', '전체']),
+    };
+
+    for (let i = 1; i < data.length; i++) {
+      const row  = data[i];
+      const rBan  = banCol  >= 0 ? norm(row[banCol])  : '';
+      const rNum  = numCol  >= 0 ? norm(row[numCol])  : '';
+      const rName = nameCol >= 0 ? norm(row[nameCol]) : '';
+
+      const nameMatch = rName === norm(name);
+      const banMatch  = !ban || rBan === norm(ban);
+      const numMatch  = !num || rNum === norm(num);
+
+      if (nameMatch && banMatch && numMatch) {
+        const get = col => {
+          if (col < 0 || col >= row.length) return null;
+          const v = row[col];
+          if (v === '' || v === null || v === undefined) return null;
+          const n = Number(v);
+          return isNaN(n) ? null : n;
+        };
+        return {
+          plan:    get(scoreKeys.plan),
+          report:  get(scoreKeys.report),
+          booth:   get(scoreKeys.booth),
+          peer:    get(scoreKeys.peer),
+          inquiry: get(scoreKeys.inquiry),
+          booth2:  get(scoreKeys.booth2),
+          total:   get(scoreKeys.total),
+        };
+      }
+    }
+    return null;
+  } catch (e) {
+    Logger.log(`[getStudentScore] 오류: ${e}`);
+    return null;
+  }
 }

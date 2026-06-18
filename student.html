@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>내 학습 현황</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+  background: #f0f4f8;
+  color: #1a1a2e;
+  min-height: 100vh;
+}
+
+header {
+  background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+  color: white;
+  padding: 22px 28px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+header h1 { font-size: 1.3rem; font-weight: 700; }
+header p  { font-size: 0.82rem; opacity: 0.65; margin-top: 3px; }
+
+.container { max-width: 780px; margin: 0 auto; padding: 24px 16px; }
+
+/* ── 로그인 ── */
+.login-box {
+  background: white;
+  border-radius: 18px;
+  padding: 32px 28px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  max-width: 420px;
+  margin: 40px auto 0;
+}
+.login-box h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 22px; color: #1a1a2e; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin-bottom: 5px; }
+.field input, .field select {
+  width: 100%; padding: 11px 13px;
+  border: 1.5px solid #e0e0e0; border-radius: 9px;
+  font-size: 0.92rem; background: #fafafa; outline: none; transition: border-color 0.2s;
+}
+.field input:focus, .field select:focus { border-color: #0f3460; background: white; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn-login {
+  width: 100%; padding: 13px; margin-top: 8px;
+  background: #0f3460; color: white; border: none;
+  border-radius: 9px; font-size: 0.95rem; font-weight: 700;
+  cursor: pointer; transition: background 0.2s;
+}
+.btn-login:hover { background: #1a4a8a; }
+.login-error { color: #c62828; font-size: 0.83rem; margin-top: 10px; text-align: center; }
+
+/* ── 대시보드 ── */
+#dashboard { display: none; }
+
+/* 총점 배너 */
+.score-banner {
+  background: linear-gradient(135deg, #0f3460, #1a4a8a);
+  color: white; border-radius: 16px; padding: 22px 26px;
+  margin-bottom: 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+}
+.score-banner .sb-label { font-size: 0.88rem; opacity: 0.8; }
+.score-banner .sb-score { font-size: 2rem; font-weight: 800; }
+.score-banner .sb-sub   { font-size: 0.82rem; opacity: 0.7; margin-top: 2px; }
+.score-banner .sb-right { text-align: right; }
+.score-pending { font-size: 1rem; font-weight: 600; opacity: 0.7; }
+
+/* 카드 공통 */
+.card {
+  background: white; border-radius: 16px; padding: 22px 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 18px;
+}
+.card-title { font-size: 0.85rem; font-weight: 700; color: #555; margin-bottom: 14px; }
+
+/* 링크 버튼 */
+.link-btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.link-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.link-btn {
+  display: inline-block; padding: 9px 20px;
+  border-radius: 8px; background: #0f3460; color: white;
+  font-size: 0.88rem; font-weight: 600; text-decoration: none; transition: background 0.2s;
+}
+.link-btn:hover { background: #1a4a8a; }
+.link-btn.disabled { background: #e0e0e0; color: #aaa; pointer-events: none; }
+.score-tag {
+  font-size: 0.75rem; font-weight: 700;
+  padding: 2px 8px; border-radius: 12px;
+  background: #e8f5e9; color: #1b5e20;
+}
+.score-tag.pending { background: #fff3e0; color: #e65100; }
+
+/* 성찰일지 */
+.qa-item   { margin-bottom: 16px; }
+.question  { font-size: 0.8rem; font-weight: 700; color: #0f3460; margin-bottom: 5px; padding-left: 4px; border-left: 3px solid #0f3460; line-height: 1.4; }
+.answer    { font-size: 0.9rem; color: #2c2c2c; line-height: 1.7; background: #f5f8ff; border-radius: 8px; padding: 11px 13px; white-space: pre-wrap; }
+.answer.empty { color: #bbb; font-style: italic; }
+.response-divider { border: none; border-top: 1px dashed #ddd; margin: 12px 0; }
+.section-score-badge {
+  display: inline-block; margin-left: 8px;
+  font-size: 0.78rem; font-weight: 700;
+  padding: 2px 10px; border-radius: 12px;
+  background: #e8f5e9; color: #1b5e20; vertical-align: middle;
+}
+.section-score-badge.pending { background: #fff3e0; color: #e65100; }
+
+/* 동료평가 */
+.peer-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 560px) { .peer-cols { grid-template-columns: 1fr; } }
+.peer-col  { background: #fafafa; border-radius: 10px; padding: 14px; }
+.peer-col-header { font-size: 0.82rem; font-weight: 700; margin-bottom: 10px; padding: 4px 10px; border-radius: 20px; display: inline-block; }
+.given-header    { background: #e0f2fe; color: #0369a1; }
+.received-header { background: #fce7f3; color: #9d174d; }
+.peer-stat-row   { display: flex; justify-content: space-between; font-size: 0.84rem; padding: 5px 0; border-bottom: 1px solid #f0f0f0; }
+.peer-stat-label { color: #666; }
+.peer-stat-val   { font-weight: 600; }
+.rank-badge { font-size: 0.78rem; font-weight: 700; background: #f0f4f8; padding: 2px 8px; border-radius: 12px; }
+.peer-items-toggle { margin-top: 10px; font-size: 0.78rem; color: #0f3460; cursor: pointer; font-weight: 600; }
+.peer-items { margin-top: 8px; }
+.peer-item { background: white; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 0.82rem; border: 1px solid #e8e8e8; }
+.peer-item-q { font-weight: 700; color: #0f3460; margin: 6px 0 2px; font-size: 0.78rem; }
+.peer-item-a { color: #333; line-height: 1.6; white-space: pre-wrap; }
+.peer-no-item { color: #bbb; font-size: 0.82rem; }
+
+.spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid #dde; border-top-color: #0f3460; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-msg { text-align: center; padding: 40px; color: #999; font-size: 0.9rem; }
+
+.logout-btn {
+  background: none; border: 1.5px solid rgba(255,255,255,0.4); color: white;
+  padding: 6px 16px; border-radius: 7px; font-size: 0.82rem; cursor: pointer; float: right; margin-top: -2px;
+}
+.logout-btn:hover { background: rgba(255,255,255,0.15); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 내 학습 현황 <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">로그아웃</button></h1>
+  <p>성찰일지 · 동료평가 · 점수 통합 현황</p>
+</header>
+
+<div class="container">
+
+  <!-- 로그인 -->
+  <div class="login-box" id="loginBox">
+    <h2>🔐 로그인</h2>
+    <div class="field-row">
+      <div class="field">
+        <label>반</label>
+        <input type="text" id="inpBan" placeholder="예: 1">
+      </div>
+      <div class="field">
+        <label>번호</label>
+        <input type="text" id="inpNum" placeholder="예: 15">
+      </div>
+    </div>
+    <div class="field">
+      <label>이름</label>
+      <input type="text" id="inpName" placeholder="예: 김민준">
+    </div>
+    <div class="field">
+      <label>비밀번호</label>
+      <input type="password" id="inpPw" placeholder="비밀번호 입력">
+    </div>
+    <button class="btn-login" id="loginBtn" onclick="doLogin()">확인</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+
+  <!-- 대시보드 -->
+  <div id="dashboard">
+    <div class="loading-msg" id="dashLoading"><span class="spinner"></span>데이터 불러오는 중...</div>
+    <div id="dashContent"></div>
+  </div>
+
+</div>
+
+<script>
+const APPS_SCRIPT_URL = '<?= ScriptApp.getService().getUrl() ?>';
+
+let session = null; // { ban, num, name }
+
+function callApi(action, params) {
+  return new Promise((resolve, reject) => {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+      if      (action === 'verifyStudent') runner.verifyStudent(params.ban, params.num, params.name, params.password);
+      else if (action === 'getMyData')     runner.getMyData(params.ban, params.num, params.name);
+    } else {
+      const url = new URL(APPS_SCRIPT_URL);
+      url.searchParams.set('action', action);
+      if (params) Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+      fetch(url.toString()).then(r => r.json()).then(d => {
+        if (d && d.error) reject(new Error(d.error)); else resolve(d);
+      }).catch(reject);
+    }
+  });
+}
+
+// ── 로그인 ────────────────────────────────────────────
+document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function doLogin() {
+  const ban  = document.getElementById('inpBan').value.trim();
+  const num  = document.getElementById('inpNum').value.trim();
+  const name = document.getElementById('inpName').value.trim();
+  const pw   = document.getElementById('inpPw').value;
+  const err  = document.getElementById('loginError');
+
+  if (!ban || !num || !name || !pw) { err.textContent = '모든 항목을 입력해 주세요.'; return; }
+  err.textContent = '';
+  document.getElementById('loginBtn').disabled = true;
+  document.getElementById('loginBtn').textContent = '확인 중...';
+
+  callApi('verifyStudent', { ban, num, name, password: pw })
+    .then(res => {
+      document.getElementById('loginBtn').disabled = false;
+      document.getElementById('loginBtn').textContent = '확인';
+      if (res.ok) {
+        session = { ban, num, name };
+        document.getElementById('loginBox').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        document.getElementById('logoutBtn').style.display = '';
+        loadDashboard();
+      } else {
+        err.textContent = res.reason || '로그인 실패';
+      }
+    })
+    .catch(e => {
+      document.getElementById('loginBtn').disabled = false;
+      document.getElementById('loginBtn').textContent = '확인';
+      err.textContent = '오류: ' + (e.message || e);
+    });
+}
+
+function logout() {
+  session = null;
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('loginBox').style.display = 'block';
+  document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('dashContent').innerHTML = '';
+  document.getElementById('inpPw').value = '';
+}
+
+// ── 데이터 로드 ────────────────────────────────────────
+function loadDashboard() {
+  document.getElementById('dashLoading').style.display = 'block';
+  document.getElementById('dashContent').innerHTML = '';
+
+  callApi('getMyData', { ban: session.ban, num: session.num, name: session.name })
+    .then(data => {
+      document.getElementById('dashLoading').style.display = 'none';
+      renderDashboard(data);
+    })
+    .catch(e => {
+      document.getElementById('dashLoading').style.display = 'none';
+      document.getElementById('dashContent').innerHTML =
+        '<div class="loading-msg">오류: ' + (e.message || e) + '</div>';
+    });
+}
+
+// ── 렌더링 ────────────────────────────────────────────
+function renderDashboard(data) {
+  const sc = data.scores || {};
+  const s  = session;
+  let html = '';
+
+  // 점수 표시 헬퍼
+  function scoreStr(val, suffix) {
+    if (val === null || val === undefined) return '(채점중)';
+    return val + (suffix || '') + '점';
+  }
+  function scoreBadge(val, suffix) {
+    const pending = val === null || val === undefined;
+    return `<span class="section-score-badge${pending ? ' pending' : ''}">${scoreStr(val, suffix)}</span>`;
+  }
+  function linkScoreTag(val) {
+    const pending = val === null || val === undefined;
+    return `<span class="score-tag${pending ? ' pending' : ''}">${pending ? '채점중' : val + '점'}</span>`;
+  }
+
+  // ① 총점 배너
+  const totalPending = sc.total === null || sc.total === undefined;
+  html += `<div class="score-banner">
+    <div>
+      <div class="sb-label">${s.name} (${s.ban}반 ${s.num}번)</div>
+      <div style="margin-top:6px; font-size:0.82rem; opacity:0.75;">최종 점수 (25점 만점)</div>
+    </div>
+    <div class="sb-right">
+      ${totalPending
+        ? `<div class="score-pending">채점중</div>`
+        : `<div class="sb-score">${sc.total}<span style="font-size:1rem; font-weight:400; opacity:0.7;"> / 25</span></div>`
+      }
+    </div>
+  </div>`;
+
+  // ② 제출 자료 링크 + 점수
+  const links = (data.linksData && data.linksData.links) || [];
+  const linkScores = [sc.plan, sc.report, sc.booth, sc.booth]; // 캔바·상호작용 = 부스준비
+  const hasLink = links.some(l => l.url);
+  html += `<div class="card">
+    <div class="card-title">📎 제출 자료</div>
+    <div class="link-btn-row">`;
+  if (hasLink) {
+    links.forEach((l, i) => {
+      const scoreVal = linkScores[i] !== undefined ? linkScores[i] : null;
+      html += `<div class="link-item">
+        ${l.url
+          ? `<a href="${l.url}" target="_blank" rel="noopener" class="link-btn">${l.label}</a>`
+          : `<span class="link-btn disabled">${l.label}</span>`}
+        ${linkScoreTag(scoreVal)}
+      </div>`;
+    });
+  } else {
+    html += `<span style="color:#bbb; font-size:0.85rem;">제출된 자료가 없습니다.</span>`;
+  }
+  html += `</div></div>`;
+
+  // ③ 동료평가 카드
+  const ps = data.peer || {};
+  const g  = ps.given    || { count:0, charSum:0, schoolRank:'-', schoolTotal:'-', classRank:'-', classTotal:'-', items:[] };
+  const r  = ps.received || { count:0, charSum:0, schoolRank:'-', schoolTotal:'-', classRank:'-', classTotal:'-', items:[] };
+  function rankBadge(rank, total) {
+    if (!rank || rank === '-') return `<span class="rank-badge">-</span>`;
+    return `<span class="rank-badge">${rank}위 / ${total}명</span>`;
+  }
+  function peerItemsHtml(items, mode) {
+    if (!items || !items.length) return `<div class="peer-no-item">항목 없음</div>`;
+    return items.map(item => {
+      const who = mode === 'given'
+        ? `→ <strong>${item.targetName}</strong>${item.targetId ? ' (' + item.targetId + ')' : ''}`
+        : `← <strong>익명</strong>`;
+      const body = item.contents.map(c =>
+        `<div class="peer-item-q">${c.q}</div><div class="peer-item-a">${c.a}</div>`
+      ).join('');
+      return `<div class="peer-item">${who}${body}</div>`;
+    }).join('');
+  }
+
+  html += `<div class="card">
+    <div class="card-title">🤝 동료평가 ${scoreBadge(sc.peer)}</div>
+    <div class="peer-cols">
+      <div class="peer-col">
+        <div class="peer-col-header given-header">해준 동료평가</div>
+        <div class="peer-stat-row"><span class="peer-stat-label">횟수</span><span class="peer-stat-val">${g.count}건</span></div>
+        <div class="peer-stat-row"><span class="peer-stat-label">글자수 합</span><span class="peer-stat-val">${(g.charSum||0).toLocaleString()}자</span></div>
+        <div class="peer-stat-row"><span class="peer-stat-label">학급 순위</span>${rankBadge(g.classRank, g.classTotal)}</div>
+        <div class="peer-stat-row"><span class="peer-stat-label">전교 순위</span>${rankBadge(g.schoolRank, g.schoolTotal)}</div>
+        <div class="peer-items-toggle" onclick="toggleItems(this)">▶ 내용 펼치기</div>
+        <div class="peer-items" style="display:none">${peerItemsHtml(g.items,'given')}</div>
+      </div>
+      <div class="peer-col">
+        <div class="peer-col-header received-header">받은 동료평가</div>
+        <div class="peer-stat-row"><span class="peer-stat-label">횟수</span><span class="peer-stat-val">${r.count}건</span></div>
+        <div class="peer-stat-row"><span class="peer-stat-label">글자수 합</span><span class="peer-stat-val">${(r.charSum||0).toLocaleString()}자</span></div>
+        <div class="peer-stat-row"><span class="peer-stat-label">학급 순위</span>${rankBadge(r.classRank, r.classTotal)}</div>
+        <div class="peer-stat-row"><span class="peer-stat-label">전교 순위</span>${rankBadge(r.schoolRank, r.schoolTotal)}</div>
+        <div class="peer-items-toggle" onclick="toggleItems(this)">▶ 내용 펼치기</div>
+        <div class="peer-items" style="display:none">${peerItemsHtml(r.items,'received')}</div>
+      </div>
+    </div>
+  </div>`;
+
+  // ④ 성찰일지
+  const refs = data.reflections || [];
+  refs.forEach(ref => {
+    const isBooth   = ref.source.includes('부스');
+    const isInquiry = ref.source.includes('탐구');
+    const scoreVal  = isBooth ? sc.booth2 : (isInquiry ? sc.inquiry : null);
+    const badgeClass = isBooth ? 'badge-booth' : 'badge-inquiry';
+    const badgeColor = isBooth
+      ? 'background:#fff3e0;color:#e65100'
+      : 'background:#e8f5e9;color:#1b5e20';
+
+    html += `<div class="card">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:18px; padding-bottom:12px; border-bottom:2px solid #f0f4f8;">
+        <span style="font-size:0.78rem; font-weight:700; padding:3px 12px; border-radius:20px; ${badgeColor}">${ref.source}</span>
+        ${scoreBadge(scoreVal)}
+      </div>`;
+
+    if (ref.responses.length > 1) {
+      html += `<div style="font-size:0.78rem;color:#888;margin-bottom:10px;">※ 응답 ${ref.responses.length}건</div>`;
+    }
+    ref.responses.forEach((resp, ri) => {
+      if (ri > 0) html += '<hr class="response-divider">';
+      if (resp.timestamp) html += `<div style="font-size:0.74rem;color:#aaa;margin-bottom:10px;">제출: ${resp.timestamp}</div>`;
+      ref.questions.forEach((q, qi) => {
+        const ans = resp.answers[qi] || '';
+        html += `<div class="qa-item">
+          <div class="question">Q${qi+1}. ${q}</div>
+          <div class="answer${ans ? '' : ' empty'}">${ans || '(미응답)'}</div>
+        </div>`;
+      });
+    });
+    html += `</div>`;
+  });
+
+  if (!refs.length) {
+    html += `<div class="card"><div style="color:#bbb;text-align:center;padding:20px;">성찰일지 응답이 없습니다.</div></div>`;
+  }
+
+  document.getElementById('dashContent').innerHTML = html;
+}
+
+function toggleItems(btn) {
+  const el = btn.nextElementSibling;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  btn.textContent = (open ? '▶' : '▼') + ' 내용 ' + (open ? '펼치기' : '접기');
+}
+</script>
+</body>
+</html>
