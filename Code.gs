@@ -3,6 +3,7 @@
 // =============================================
 const SS_BOOTH = '1avD0D72BhxP7aZfM0BO7Y4xc2B7UWrT9U5o5S6fG2tU';
 const SS_INQUIRY = '1JJy80Ah9NaJN_BNk21Nyb7P3dtli5OFtR2AfMNgPkb4';
+const SS_LINKS = '1ENuXr_ibmRNeUlAGjQLwh3Vs5zLP5hCCNy_hDEgFb-0'; // 계획서/보고서/캔바/상호작용 링크
 
 const STUDENT_INFO_SHEET = '학생 정보';
 const RESPONSE_SHEET = '정리';
@@ -38,6 +39,12 @@ function doGet(e) {
       );
     } else if (action === 'getStudentReflections') {
       data = getStudentReflections(
+        e.parameter.studentName || '',
+        e.parameter.ban         || '',
+        e.parameter.modum       || ''
+      );
+    } else if (action === 'getStudentLinks') {
+      data = getStudentLinks(
         e.parameter.studentName || '',
         e.parameter.ban         || '',
         e.parameter.modum       || ''
@@ -295,6 +302,58 @@ function getStudentReflections(studentName, ban, modum) {
   });
 
   return reflections;
+}
+
+// =============================================
+// 계획서·보고서·캔바·상호작용 링크 조회 (시트1, K~N열)
+// =============================================
+function getStudentLinks(studentName, ban, modum) {
+  const LINK_LABELS = ['계획서', '보고서', '캔바', '1,2차 상호작용'];
+  // K~N = 인덱스 10~13
+  const LINK_COL_START = 10;
+  const LINK_COL_END   = 13;
+
+  try {
+    const ss = SpreadsheetApp.openById(SS_LINKS);
+    const sheet = findSheet(ss, ['시트1', 'Sheet1']);
+    if (!sheet) return { error: '시트1 없음' };
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return { links: [] };
+
+    const header = data[0].map(h => String(h).trim());
+    const nameCol  = findColIndex(header, ['이름', '학생이름', '성명', '학생 이름']);
+    const banCol   = findColIndex(header, ['반', '학반', '학년반', '학년/반']);
+    const modumCol = findColIndex(header, ['모둠', '모둠번호', '그룹', '팀']);
+
+    // 헤더에 실제 라벨이 있으면 우선 사용
+    const labels = [];
+    for (let c = LINK_COL_START; c <= LINK_COL_END; c++) {
+      labels.push(c < header.length && header[c] ? header[c] : LINK_LABELS[c - LINK_COL_START] || `${c+1}열`);
+    }
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const rName  = nameCol  >= 0 ? norm(row[nameCol])  : '';
+      const rBan   = banCol   >= 0 ? String(row[banCol]).trim()   : '';
+      const rModum = modumCol >= 0 ? String(row[modumCol]).trim() : '';
+
+      if (norm(studentName) !== rName) continue;
+      if (ban   && norm(rBan)   !== norm(ban))   continue;
+      if (modum && norm(rModum) !== norm(modum)) continue;
+
+      const links = [];
+      for (let c = LINK_COL_START; c <= LINK_COL_END; c++) {
+        const val = c < row.length ? String(row[c] || '').trim() : '';
+        links.push({ label: labels[c - LINK_COL_START], url: val });
+      }
+      return { links };
+    }
+    return { links: [] };
+  } catch (e) {
+    Logger.log(`[getStudentLinks] 오류: ${e}`);
+    return { error: e.toString() };
+  }
 }
 
 // =============================================

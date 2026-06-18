@@ -325,6 +325,49 @@
     color: #bbb;
     font-size: 0.9rem;
   }
+
+  /* 링크 카드 */
+  .link-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    margin-bottom: 20px;
+  }
+
+  .link-card-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #555;
+    margin-bottom: 12px;
+  }
+
+  .link-btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .link-btn {
+    display: inline-block;
+    padding: 9px 20px;
+    border-radius: 8px;
+    background: #4f8ef7;
+    color: white;
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s;
+  }
+
+  .link-btn:hover { background: #3a7be0; }
+
+  .link-btn.disabled {
+    background: #e8e8e8;
+    color: #aaa;
+    cursor: default;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -400,6 +443,8 @@ function callApi(action, params) {
         runner.getFilteredStudents(params.ban, params.modum, params.name);
       } else if (action === 'getStudentReflections') {
         runner.getStudentReflections(params.studentName, params.ban, params.modum);
+      } else if (action === 'getStudentLinks') {
+        runner.getStudentLinks(params.studentName, params.ban, params.modum);
       }
     } else {
       // 외부 — fetch API
@@ -517,37 +562,62 @@ function selectStudent(chip, student) {
   resultContent.innerHTML = '<div class="status-msg"><span class="spinner"></span>성찰일지 불러오는 중...</div>';
   resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  callApi('getStudentReflections', {
-    studentName: student.name,
-    ban: student.ban,
-    modum: student.modum
-  })
-    .then(reflections => renderReflections(student, reflections))
+  Promise.all([
+    callApi('getStudentReflections', { studentName: student.name, ban: student.ban, modum: student.modum }),
+    callApi('getStudentLinks',       { studentName: student.name, ban: student.ban, modum: student.modum })
+  ])
+    .then(([reflections, linksData]) => renderResult(student, reflections, linksData))
     .catch(err => {
       resultContent.innerHTML = '<div class="status-msg">오류: ' + (err.message || err) + '</div>';
     });
 }
 
-// ── 결과 렌더링 ───────────────────────────────────────
-function renderReflections(student, reflections) {
+// ── 링크 + 성찰일지 통합 렌더링 ──────────────────────
+function renderResult(student, reflections, linksData) {
   const resultContent = document.getElementById('resultContent');
 
-  if (!reflections || reflections.length === 0) {
-    resultContent.innerHTML = `
-      <div class="reflection-card">
-        <div class="no-result">
-          <strong>${student.name}</strong> 학생의 성찰일지 응답이 없습니다.<br>
-          <small style="color:#bbb; margin-top:6px; display:block;">설문지 응답 시트1의 K~P열을 확인해 주세요.</small>
-        </div>
-      </div>`;
-    return;
-  }
-
   let html = `<div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin-bottom:16px; padding-left:4px;">
-    ${student.name} 학생의 성찰일지
+    ${student.name} 학생
     ${student.ban   ? `<span style="font-size:0.82rem; font-weight:400; color:#888; margin-left:8px;">${student.ban}반</span>`   : ''}
     ${student.modum ? `<span style="font-size:0.82rem; font-weight:400; color:#888;">${student.modum}모둠</span>` : ''}
   </div>`;
+
+  // 링크 버튼 카드
+  const links = (linksData && linksData.links) || [];
+  const hasLink = links.some(l => l.url);
+  html += `<div class="link-card">
+    <div class="link-card-title">📎 제출 자료</div>
+    <div class="link-btn-row">`;
+  if (hasLink) {
+    links.forEach(l => {
+      if (l.url) {
+        html += `<a href="${l.url}" target="_blank" rel="noopener" class="link-btn">${l.label}</a>`;
+      } else {
+        html += `<span class="link-btn disabled">${l.label}</span>`;
+      }
+    });
+  } else {
+    html += `<span style="color:#bbb; font-size:0.85rem;">제출된 자료가 없습니다.</span>`;
+  }
+  html += `</div></div>`;
+
+  resultContent.innerHTML = html;
+  renderReflections(student, reflections, true);
+}
+
+// ── 결과 렌더링 ───────────────────────────────────────
+function renderReflections(student, reflections, append) {
+  const resultContent = document.getElementById('resultContent');
+
+  if (!reflections || reflections.length === 0) {
+    resultContent.insertAdjacentHTML('beforeend', `
+      <div class="reflection-card">
+        <div class="no-result">성찰일지 응답이 없습니다.</div>
+      </div>`);
+    return;
+  }
+
+  let html = '';
 
   reflections.forEach(ref => {
     const badgeClass = ref.source.includes('탐구') ? 'badge-inquiry' : 'badge-booth';
@@ -577,7 +647,7 @@ function renderReflections(student, reflections) {
     html += `</div>`;
   });
 
-  resultContent.innerHTML = html;
+  resultContent.insertAdjacentHTML('beforeend', html);
 }
 
 function resetAll() {
