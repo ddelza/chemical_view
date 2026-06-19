@@ -76,6 +76,8 @@ function doGet(e) {
         e.parameter.ban         || '',
         e.parameter.modum       || ''
       );
+    } else if (action === 'debugPassword') {
+      data = debugPasswordSheet();
     } else if (action === 'debug') {
       data = debugSheetInfo();
     } else {
@@ -596,6 +598,25 @@ function computeRankFiltered(charMap, targetName, nameSet) {
     if (n !== targetName && (charMap[n] || 0) > myVal) rank++;
   });
   return rank;
+}
+
+// =============================================
+// 비밀번호 시트 디버그
+// =============================================
+function debugPasswordSheet() {
+  try {
+    const ss    = SpreadsheetApp.openById(SS_PASSWORD);
+    const sheets = ss.getSheets().map(s => s.getName());
+    const sheet  = ss.getSheets()[0];
+    const data   = sheet.getDataRange().getValues();
+    return {
+      sheets,
+      header: data[0],
+      row2:   data[1] || [],
+      row3:   data[2] || [],
+      totalRows: data.length
+    };
+  } catch(e) { return { error: e.toString() }; }
 }
 
 // =============================================
