@@ -629,19 +629,30 @@ function verifyStudent(ban, num, name, password) {
     const data  = sheet.getDataRange().getValues();
     const header = data[0].map(h => String(h).trim());
 
-    const banCol  = findColIndex(header, ['반', '학반', '학년반']);
-    const numCol  = findColIndex(header, ['번호', '학번', '출석번호', '번']);
-    const nameCol = findColIndex(header, ['이름', '성명', '학생이름']);
-    const pwCol   = findColIndex(header, ['비밀번호', '패스워드', 'password', 'pw']);
+    // 학번(A=0), 성명(B=1), 비밀번호(C=2) 구조
+    const idCol   = findColIndex(header, ['학번', '번호']);
+    const nameCol = findColIndex(header, ['성명', '이름', '학생이름']);
+    const pwCol   = findColIndex(header, ['비밀번호', '개인 비밀번호', '패스워드', 'password']);
+
+    const inputBan = parseInt(ban,  10);
+    const inputNum = parseInt(num,  10);
 
     for (let i = 1; i < data.length; i++) {
-      const row  = data[i];
-      const rBan  = banCol  >= 0 ? norm(row[banCol])  : '';
-      const rNum  = numCol  >= 0 ? norm(row[numCol])  : '';
-      const rName = nameCol >= 0 ? norm(row[nameCol]) : '';
-      const rPw   = pwCol   >= 0 ? String(row[pwCol]).trim() : '';
+      const row    = data[i];
+      const rId    = idCol   >= 0 ? parseInt(row[idCol],   10) : 0;
+      const rName  = nameCol >= 0 ? norm(row[nameCol])         : '';
+      const rPw    = pwCol   >= 0 ? String(row[pwCol]).trim()  : '';
 
-      if (rBan === norm(ban) && rNum === norm(num) && rName === norm(name)) {
+      // 학번 파싱: 학년(1자리) + 반(1자리) + 번호(2자리) = 4자리
+      // 예: 3101 → 학년=3, 반=1, 번호=01
+      const rBan = Math.floor((rId % 1000) / 100);
+      const rNum = rId % 100;
+
+      const nameMatch = rName === norm(name);
+      const banMatch  = rBan  === inputBan;
+      const numMatch  = rNum  === inputNum;
+
+      if (nameMatch && banMatch && numMatch) {
         if (rPw === password.trim()) return { ok: true };
         else return { ok: false, reason: '비밀번호가 일치하지 않습니다.' };
       }
