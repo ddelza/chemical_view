@@ -76,6 +76,8 @@ function doGet(e) {
         e.parameter.ban         || '',
         e.parameter.modum       || ''
       );
+    } else if (action === 'debugGrading') {
+      data = debugGradingSheet();
     } else if (action === 'debugPassword') {
       data = debugPasswordSheet();
     } else if (action === 'debug') {
@@ -603,6 +605,21 @@ function computeRankFiltered(charMap, targetName, nameSet) {
 // =============================================
 // 비밀번호 시트 디버그
 // =============================================
+function debugGradingSheet() {
+  try {
+    const ss    = SpreadsheetApp.openById(SS_GRADING);
+    const sheet = findSheet(ss, ['채점', '점수', 'Score']);
+    if (!sheet) return { error: '채점 시트 없음', sheets: ss.getSheets().map(s=>s.getName()) };
+    const data = sheet.getDataRange().getValues();
+    return {
+      header:    data[0],
+      row2:      data[1] || [],
+      row3:      data[2] || [],
+      totalRows: data.length
+    };
+  } catch(e) { return { error: e.toString() }; }
+}
+
 function debugPasswordSheet() {
   try {
     const ss    = SpreadsheetApp.openById(SS_PASSWORD);
