@@ -745,30 +745,34 @@ function getStudentScore(ban, num, name) {
     const data   = sheet.getDataRange().getValues();
     const header = data[0].map(h => String(h).trim());
 
-    const banCol  = findColIndex(header, ['반', '학반', '학년반']);
-    const numCol  = findColIndex(header, ['번호', '학번', '출석번호', '번']);
+    // 헤더: ["","학번","반","모둠","주제","실험","이름","계획서(3점)","보고서(4점)","부스 준비(3점)","동료평가(3점)","탐구성찰(6점)","부스성찰(6점)","합"]
+    const banCol  = findColIndex(header, ['반']);
     const nameCol = findColIndex(header, ['이름', '성명', '학생이름']);
+    const idCol   = findColIndex(header, ['학번']);
 
-    // 점수 컬럼 탐지
     const scoreKeys = {
-      plan:   findColIndex(header, ['계획서']),
-      report: findColIndex(header, ['보고서']),
-      booth:  findColIndex(header, ['부스준비', '부스 준비', '캔바', '부스']),
-      peer:   findColIndex(header, ['동료평가', '동료 평가']),
-      inquiry:findColIndex(header, ['탐구성찰', '탐구 성찰']),
-      booth2: findColIndex(header, ['부스성찰', '부스 성찰']),
-      total:  findColIndex(header, ['합계', '총점', '최종', '전체']),
+      plan:    findColIndex(header, ['계획서']),
+      report:  findColIndex(header, ['보고서']),
+      booth:   findColIndex(header, ['부스 준비', '부스준비', '캔바']),
+      peer:    findColIndex(header, ['동료평가', '동료 평가']),
+      inquiry: findColIndex(header, ['탐구성찰', '탐구 성찰']),
+      booth2:  findColIndex(header, ['부스성찰', '부스 성찰']),
+      total:   findColIndex(header, ['합계', '합', '총점', '최종']),
     };
 
+    const inputBan = parseInt(ban, 10);
+    const inputNum = parseInt(num, 10);
+
     for (let i = 1; i < data.length; i++) {
-      const row  = data[i];
-      const rBan  = banCol  >= 0 ? norm(row[banCol])  : '';
-      const rNum  = numCol  >= 0 ? norm(row[numCol])  : '';
+      const row   = data[i];
       const rName = nameCol >= 0 ? norm(row[nameCol]) : '';
+      const rBan  = banCol  >= 0 ? parseInt(row[banCol], 10) : 0;
+      const rId   = idCol   >= 0 ? parseInt(row[idCol],  10) : 0;
+      const rNum  = rId % 100; // 학번 끝 2자리 = 번호
 
       const nameMatch = rName === norm(name);
-      const banMatch  = !ban || rBan === norm(ban);
-      const numMatch  = !num || rNum === norm(num);
+      const banMatch  = !ban || rBan === inputBan;
+      const numMatch  = !num || rNum === inputNum;
 
       if (nameMatch && banMatch && numMatch) {
         const get = col => {
