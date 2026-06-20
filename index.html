@@ -326,6 +326,34 @@
     font-size: 0.9rem;
   }
 
+  /* 청취자 평가 카드 */
+  .aud-card { background: white; border-radius: 16px; padding: 22px 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 20px; }
+  .aud-card-title { font-size: 0.85rem; font-weight: 700; color: #555; margin-bottom: 14px; }
+  .aud-stat-row-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+  @media (max-width: 600px) { .aud-stat-row-wrap { grid-template-columns: 1fr; } }
+  .aud-stat-box { background: #fafafa; border-radius: 10px; padding: 13px; }
+  .aud-stat-box-label { font-size: 0.8rem; font-weight: 700; margin-bottom: 9px; padding: 3px 10px; border-radius: 20px; display: inline-block; }
+  .given-label { background: #e0f7fa; color: #00695c; }
+  .recv-label  { background: #fce4ec; color: #880e4f; }
+  .aud-stat-row { display: flex; justify-content: space-between; font-size: 0.83rem; padding: 4px 0; border-bottom: 1px solid #f0f0f0; color: #555; }
+  .aud-stat-row span:last-child { font-weight: 600; color: #1a1a2e; }
+  .aud-section { margin-top: 14px; }
+  .aud-section-title { font-size: 0.83rem; font-weight: 700; color: #444; margin-bottom: 6px; }
+  .aud-items-toggle { font-size: 0.78rem; color: #4f8ef7; cursor: pointer; font-weight: 600; margin-bottom: 4px; }
+  .aud-no-item { color: #bbb; font-size: 0.82rem; padding: 6px 0; }
+  /* 해준 평가 */
+  .aud-given-item { background: #f5fffe; border: 1px solid #b2dfdb; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .aud-session-label { font-size: 0.75rem; font-weight: 700; color: #00695c; margin-bottom: 8px; }
+  .aud-overall-label { font-size: 0.75rem; font-weight: 700; color: #888; margin-bottom: 3px; }
+  .aud-overall-text { font-size: 0.88rem; color: #333; line-height: 1.6; background: white; border-radius: 7px; padding: 8px 10px; margin-bottom: 8px; white-space: pre-wrap; }
+  .aud-indiv-row { display: flex; gap: 8px; align-items: flex-start; margin-top: 5px; font-size: 0.85rem; }
+  .aud-target-name { min-width: 48px; font-weight: 700; color: #0f3460; flex-shrink: 0; }
+  .aud-indiv-comment { color: #333; line-height: 1.5; white-space: pre-wrap; }
+  /* 받은 평가 */
+  .aud-recv-item { background: #fdf6ff; border: 1px solid #e1bee7; border-radius: 10px; padding: 11px 13px; margin-bottom: 8px; }
+  .aud-recv-writer { font-size: 0.75rem; font-weight: 700; color: #880e4f; margin-bottom: 5px; }
+  .aud-recv-comment { font-size: 0.88rem; color: #333; line-height: 1.6; white-space: pre-wrap; }
+
   /* 링크 카드 */
   .link-card {
     background: white;
@@ -537,6 +565,8 @@ function callApi(action, params) {
         runner.getStudentReflections(params.studentName, params.ban, params.modum);
       } else if (action === 'getStudentLinks') {
         runner.getStudentLinks(params.studentName, params.ban, params.modum);
+      } else if (action === 'getAudienceStats') {
+        runner.getAudienceStats(params.studentName, params.ban, false);
       } else if (action === 'getPeerStats') {
         runner.getPeerStats(params.studentName, params.ban, params.modum);
       }
@@ -661,16 +691,17 @@ function selectStudent(chip, student) {
   Promise.all([
     callApi('getStudentReflections', { studentName: student.name, ban: student.ban, modum: student.modum }),
     callApi('getStudentLinks',       { studentName: student.name, ban: student.ban, modum: student.modum }),
-    callApi('getPeerStats',          { studentName: student.name, ban: student.ban, modum: student.modum })
+    callApi('getPeerStats',          { studentName: student.name, ban: student.ban, modum: student.modum }),
+    callApi('getAudienceStats',      { studentName: student.name, ban: student.ban })
   ])
-    .then(([reflections, linksData, peerStats]) => renderResult(student, reflections, linksData, peerStats))
+    .then(([reflections, linksData, peerStats, audienceStats]) => renderResult(student, reflections, linksData, peerStats, audienceStats))
     .catch(err => {
       resultContent.innerHTML = '<div class="status-msg">오류: ' + (err.message || err) + '</div>';
     });
 }
 
 // ── 링크 + 성찰일지 통합 렌더링 ──────────────────────
-function renderResult(student, reflections, linksData, peerStats) {
+function renderResult(student, reflections, linksData, peerStats, audienceStats) {
   const resultContent = document.getElementById('resultContent');
 
   let html = `<div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin-bottom:16px; padding-left:4px;">
@@ -700,6 +731,7 @@ function renderResult(student, reflections, linksData, peerStats) {
 
   resultContent.innerHTML = html;
   renderPeerStats(peerStats);
+  renderAudienceCard(audienceStats, false);
   renderReflections(student, reflections, true);
 }
 
@@ -766,6 +798,89 @@ function toggleItems(btn) {
   const open = items.style.display !== 'none';
   items.style.display = open ? 'none' : 'block';
   btn.textContent = (open ? '▶' : '▼') + ' 내용 ' + (open ? '펼치기' : '접기');
+}
+
+// ── 청취자 평가 렌더링 ───────────────────────────────
+// anonymous=true 이면 받은 평가 작성자 익명 표시
+function renderAudienceCard(as, anonymous) {
+  const resultContent = document.getElementById('resultContent');
+  if (!as || as.error) return;
+
+  const st = as.stats || {};
+  const given    = as.given    || [];
+  const received = as.received || [];
+
+  function rankBadge(rank, total) {
+    if (!rank || rank === '-') return `<span class="rank-badge">-</span>`;
+    return `<span class="rank-badge">${rank}위 / ${total}명</span>`;
+  }
+
+  // 해준 평가: 발표 세션별 카드
+  let givenHtml = '';
+  if (given.length === 0) {
+    givenHtml = `<div class="aud-no-item">작성한 청취자 평가가 없습니다.</div>`;
+  } else {
+    givenHtml = given.map((item, idx) => `
+      <div class="aud-given-item">
+        <div class="aud-session-label">발표 ${idx + 1}</div>
+        ${item.overallComment ? `
+          <div class="aud-overall-label">📣 전반적 평가 (인상적인 장면)</div>
+          <div class="aud-overall-text">${item.overallComment}</div>` : ''}
+        ${item.individuals.filter(c => c.targetName || c.comment).map(c => `
+          <div class="aud-indiv-row">
+            <span class="aud-target-name">${c.targetName || '?'}</span>
+            <span class="aud-indiv-comment">${c.comment || '(미작성)'}</span>
+          </div>`).join('')}
+      </div>`).join('');
+  }
+
+  // 받은 평가: 개별 댓글 카드
+  let receivedHtml = '';
+  if (received.length === 0) {
+    receivedHtml = `<div class="aud-no-item">받은 청취자 평가가 없습니다.</div>`;
+  } else {
+    receivedHtml = received.map(item => `
+      <div class="aud-recv-item">
+        <div class="aud-recv-writer">${anonymous ? '익명' : item.writerName}</div>
+        <div class="aud-recv-comment">${item.comment}</div>
+      </div>`).join('');
+  }
+
+  const html = `
+  <div class="aud-card">
+    <div class="aud-card-title">👂 청취자 평가</div>
+
+    <div class="aud-stat-row-wrap">
+      <div class="aud-stat-box given-box">
+        <div class="aud-stat-box-label given-label">해준 청취자 평가</div>
+        <div class="aud-stat-row"><span>횟수</span><span>${st.givenCount || 0}건</span></div>
+        <div class="aud-stat-row"><span>글자수 합</span><span>${(st.givenCharSum||0).toLocaleString()}자</span></div>
+        <div class="aud-stat-row"><span>학급 순위</span>${rankBadge(st.givenClassRank, st.givenClassTotal)}</div>
+        <div class="aud-stat-row"><span>전교 순위</span>${rankBadge(st.givenSchoolRank, st.givenSchoolTotal)}</div>
+      </div>
+      <div class="aud-stat-box recv-box">
+        <div class="aud-stat-box-label recv-label">받은 청취자 평가</div>
+        <div class="aud-stat-row"><span>횟수</span><span>${st.receivedCount || 0}건</span></div>
+        <div class="aud-stat-row"><span>글자수 합</span><span>${(st.receivedCharSum||0).toLocaleString()}자</span></div>
+        <div class="aud-stat-row"><span>학급 순위</span>${rankBadge(st.receivedClassRank, st.receivedClassTotal)}</div>
+        <div class="aud-stat-row"><span>전교 순위</span>${rankBadge(st.receivedSchoolRank, st.receivedSchoolTotal)}</div>
+      </div>
+    </div>
+
+    <div class="aud-section">
+      <div class="aud-section-title">✏️ 내가 쓴 청취자 평가</div>
+      <div class="aud-items-toggle" onclick="toggleItems(this)">▶ 내용 펼치기</div>
+      <div class="aud-given-list" style="display:none">${givenHtml}</div>
+    </div>
+
+    <div class="aud-section">
+      <div class="aud-section-title">💬 내가 받은 청취자 평가</div>
+      <div class="aud-items-toggle" onclick="toggleItems(this)">▶ 내용 펼치기</div>
+      <div class="aud-recv-list" style="display:none">${receivedHtml}</div>
+    </div>
+  </div>`;
+
+  resultContent.insertAdjacentHTML('beforeend', html);
 }
 
 // ── 결과 렌더링 ───────────────────────────────────────
