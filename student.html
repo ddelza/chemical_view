@@ -370,7 +370,7 @@ function renderDashboard(data) {
   }
 
   html += `<div class="card">
-    <div class="card-title">🤝 동료평가 ${scoreBadge(sc.peer)}</div>
+    <div class="card-title">🤝 동료평가</div>
     <div class="peer-cols">
       <div class="peer-col">
         <div class="peer-col-header given-header">해준 동료평가</div>
@@ -393,7 +393,12 @@ function renderDashboard(data) {
     </div>
   </div>`;
 
-  // ④ 성찰일지
+  // ④ 청취자 평가 카드 (동료평가 바로 다음)
+  if (data.audience) {
+    html += buildAudienceCardHtml(data.audience, sc.peer);
+  }
+
+  // ⑤ 성찰일지
   const refs = data.reflections || [];
   refs.forEach(ref => {
     const isBooth   = ref.source.includes('부스');
@@ -431,16 +436,13 @@ function renderDashboard(data) {
     html += `<div class="card"><div style="color:#bbb;text-align:center;padding:20px;">성찰일지 응답이 없습니다.</div></div>`;
   }
 
-  // ⑤ 청취자 평가 카드 (동료평가 다음, 성찰일지 전)
-  if (data.audience) {
-    html += buildAudienceCardHtml(data.audience);
-  }
-
   document.getElementById('dashContent').innerHTML = html;
 }
 
-function buildAudienceCardHtml(as) {
+function buildAudienceCardHtml(as, peerScore) {
   if (!as || as.error) return '';
+  const pending = peerScore === null || peerScore === undefined;
+  const scoreBadgeHtml = `<span class="section-score-badge${pending ? ' pending' : ''}">${pending ? '(채점중)' : peerScore + '점'}</span>`;
   const st = as.stats || {};
   const given = as.given || [];
   const received = as.received || [];
@@ -473,7 +475,7 @@ function buildAudienceCardHtml(as) {
 
   return `
   <div class="aud-card">
-    <div class="aud-card-title">👂 청취자 평가</div>
+    <div class="aud-card-title">👂 청취자 평가 ${scoreBadgeHtml}</div>
     <div class="aud-stat-row-wrap">
       <div class="aud-stat-box">
         <div class="aud-stat-box-label given-label">해준 청취자 평가</div>
