@@ -489,8 +489,63 @@
     pointer-events: none;
   }
 </style>
+  #pwGate {
+    position: fixed; inset: 0; background: #1a1a2e;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+  }
+  #pwGate .box {
+    background: white; padding: 36px 32px; border-radius: 16px;
+    width: 90%; max-width: 340px; text-align: center;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+  }
+  #pwGate h2 { font-size: 1.1rem; margin-bottom: 16px; color: #1a1a2e; }
+  #pwGate input {
+    width: 100%; padding: 12px 14px; border: 2px solid #e0e6ed;
+    border-radius: 10px; font-size: 1rem; margin-bottom: 12px;
+    box-sizing: border-box;
+  }
+  #pwGate input:focus { outline: none; border-color: #1a1a2e; }
+  #pwGate button {
+    width: 100%; padding: 12px; border: none; border-radius: 10px;
+    background: #1a1a2e; color: white; font-size: 1rem; font-weight: 700;
+    cursor: pointer;
+  }
+  #pwGate .err { color: #e74c3c; font-size: 0.82rem; margin-top: 8px; min-height: 1.2em; }
 </head>
 <body>
+
+<div id="pwGate">
+  <div class="box">
+    <h2>🔒 교사 전용 페이지입니다</h2>
+    <input type="password" id="pwGateInput" placeholder="비밀번호" autofocus />
+    <button onclick="checkPwGate()">입장</button>
+    <div class="err" id="pwGateErr"></div>
+  </div>
+</div>
+
+<script>
+  const PW_GATE_KEY = 'reflectionViewerAuthed';
+  const PW_GATE_PASSWORD = 'byung0703!';
+
+  function checkPwGate() {
+    const val = document.getElementById('pwGateInput').value;
+    if (val === PW_GATE_PASSWORD) {
+      sessionStorage.setItem(PW_GATE_KEY, '1');
+      document.getElementById('pwGate').style.display = 'none';
+    } else {
+      document.getElementById('pwGateErr').textContent = '비밀번호가 올바르지 않습니다.';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    if (sessionStorage.getItem(PW_GATE_KEY) === '1') {
+      document.getElementById('pwGate').style.display = 'none';
+    }
+    document.getElementById('pwGateInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') checkPwGate();
+    });
+  });
+</script>
 
 <header>
   <h1>📋 성찰일지 뷰어</h1>
