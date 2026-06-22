@@ -163,9 +163,27 @@ header p  { font-size: 0.82rem; opacity: 0.65; margin-top: 3px; }
   padding: 6px 16px; border-radius: 7px; font-size: 0.82rem; cursor: pointer; float: right; margin-top: -2px;
 }
 .logout-btn:hover { background: rgba(255,255,255,0.15); }
+
+  /* 인앱 브라우저 경고 배너 */
+  #inappBanner {
+    display: none;
+    background: #fff3e0; border: 2px solid #ffb74d; border-radius: 12px;
+    padding: 16px 20px; margin: 16px; text-align: center;
+  }
+  #inappBanner p { font-size: 0.9rem; color: #e65100; margin-bottom: 10px; line-height: 1.5; }
+  #inappBanner button {
+    padding: 9px 18px; background: #e65100; color: white; border: none;
+    border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 600;
+  }
 </style>
 </head>
 <body>
+
+<div id="inappBanner">
+  <p>⚠️ 카카오톡 등 메신저 안에서 열면 데이터를 불러오지 못할 수 있어요.<br>아래 버튼으로 외부 브라우저(Chrome/Safari)에서 열어주세요.</p>
+  <button onclick="openInExternalBrowser()">외부 브라우저로 열기</button>
+</div>
+
 
 <header>
   <h1>📊 내 학습 현황 <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">로그아웃</button></h1>
@@ -514,6 +532,28 @@ function toggleItems(btn) {
   el.style.display = open ? 'none' : 'block';
   btn.textContent = (open ? '▶' : '▼') + ' 내용 ' + (open ? '펼치기' : '접기');
 }
+
+  // 카카오톡 등 인앱 브라우저 감지 - Apps Script 리다이렉트 처리가 깨져서 거의 항상 실패함
+  function detectInAppBrowser() {
+    const ua = navigator.userAgent || '';
+    return /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\//i.test(ua);
+  }
+
+  function openInExternalBrowser() {
+    const url = window.location.href;
+    const ua = navigator.userAgent || '';
+    if (/KAKAOTALK/i.test(ua)) {
+      window.location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url);
+    } else if (/NAVER/i.test(ua)) {
+      window.location.href = 'naversearchapp://inappbrowser?app=naversearchapp&url=' + encodeURIComponent(url);
+    } else {
+      window.location.href = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
+    }
+  }
+
+  if (detectInAppBrowser()) {
+    document.getElementById('inappBanner').style.display = 'block';
+  }
 </script>
 </body>
 </html>

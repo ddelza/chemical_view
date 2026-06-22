@@ -512,9 +512,27 @@
     cursor: pointer;
   }
   #pwGate .err { color: #e74c3c; font-size: 0.82rem; margin-top: 8px; min-height: 1.2em; }
+
+  /* 인앱 브라우저 경고 배너 */
+  #inappBanner {
+    display: none;
+    background: #fff3e0; border: 2px solid #ffb74d; border-radius: 12px;
+    padding: 16px 20px; margin: 16px; text-align: center;
+  }
+  #inappBanner p { font-size: 0.9rem; color: #e65100; margin-bottom: 10px; line-height: 1.5; }
+  #inappBanner button {
+    padding: 9px 18px; background: #e65100; color: white; border: none;
+    border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 600;
+  }
 </style>
 </head>
 <body>
+
+<div id="inappBanner">
+  <p>⚠️ 카카오톡 등 메신저 안에서 열면 데이터를 불러오지 못할 수 있어요.<br>아래 버튼으로 외부 브라우저(Chrome/Safari)에서 열어주세요.</p>
+  <button onclick="openInExternalBrowser()">외부 브라우저로 열기</button>
+</div>
+
 
 <div id="pwGate">
   <div class="box">
@@ -993,6 +1011,28 @@ function resetAll() {
   allStudents     = [];
   selectedStudent = null;
 }
+
+  // 카카오톡 등 인앱 브라우저 감지 - Apps Script 리다이렉트 처리가 깨져서 거의 항상 실패함
+  function detectInAppBrowser() {
+    const ua = navigator.userAgent || '';
+    return /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\//i.test(ua);
+  }
+
+  function openInExternalBrowser() {
+    const url = window.location.href;
+    const ua = navigator.userAgent || '';
+    if (/KAKAOTALK/i.test(ua)) {
+      window.location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url);
+    } else if (/NAVER/i.test(ua)) {
+      window.location.href = 'naversearchapp://inappbrowser?app=naversearchapp&url=' + encodeURIComponent(url);
+    } else {
+      window.location.href = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
+    }
+  }
+
+  if (detectInAppBrowser()) {
+    document.getElementById('inappBanner').style.display = 'block';
+  }
 </script>
 </body>
 </html>
