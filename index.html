@@ -643,6 +643,8 @@ function callApi(action, params) {
         runner.getAudienceStats(params.studentName, params.ban, false);
       } else if (action === 'getPeerStats') {
         runner.getPeerStats(params.studentName, params.ban, params.modum);
+      } else if (action === 'generateRecordDraft') {
+        runner.generateRecordDraft(params.studentName, params.ban, params.modum, params.num);
       }
     } else {
       // 외부 — fetch API
@@ -803,10 +805,57 @@ function renderResult(student, reflections, linksData, peerStats, audienceStats)
   }
   html += `</div></div>`;
 
+  html += `<div class="link-card" id="recordDraftCard">
+    <div class="link-card-title">📝 생활기록부 초안 (AI 생성 · 검토 후 사용)</div>
+    <button class="btn btn-secondary" id="btnGenDraft" onclick="generateRecordDraft()">초안 생성</button>
+    <div id="recordDraftBody" style="margin-top:10px;"></div>
+  </div>`;
+
   resultContent.innerHTML = html;
   renderPeerStats(peerStats);
   renderAudienceCard(audienceStats, false);
   renderReflections(student, reflections, true);
+}
+
+// ── 생활기록부 초안 생성 (Gemini) ───────────────────────
+function generateRecordDraft() {
+  if (!selectedStudent) return;
+  const btn  = document.getElementById('btnGenDraft');
+  const body = document.getElementById('recordDraftBody');
+  btn.disabled = true;
+  body.innerHTML = '<div class="status-msg"><span class="spinner"></span>생성 중...</div>';
+
+  callApi('generateRecordDraft', {
+    studentName: selectedStudent.name,
+    ban: selectedStudent.ban,
+    modum: selectedStudent.modum,
+    num: selectedStudent.num
+  })
+    .then(function(res) {
+      btn.disabled = false;
+      if (res && res.error) {
+        body.innerHTML = '<div class="status-msg">오류: ' + res.error + '</div>';
+        return;
+      }
+      const draft = (res && res.draft) || '';
+      body.innerHTML = `
+        <textarea id="draftText" style="width:100%; min-height:160px; font-size:0.9rem; line-height:1.5; padding:10px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">${draft.replace(/</g, '&lt;')}</textarea>
+        <div style="margin-top:6px; display:flex; gap:8px; align-items:center;">
+          <button class="btn btn-secondary" onclick="copyDraftText()">복사</button>
+          <span style="font-size:0.78rem; color:#999;">AI 초안입니다. NEIS 작성 기준에 맞게 반드시 검토·수정 후 사용하세요.</span>
+        </div>`;
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      body.innerHTML = '<div class="status-msg">오류: ' + (err.message || err) + '</div>';
+    });
+}
+
+function copyDraftText() {
+  const ta = document.getElementById('draftText');
+  if (!ta) return;
+  ta.select();
+  document.execCommand('copy');
 }
 
 // ── 동료평가 렌더링 ───────────────────────────────────

@@ -76,6 +76,13 @@ function doGet(e) {
         e.parameter.ban         || '',
         e.parameter.modum       || ''
       );
+    } else if (action === 'generateRecordDraft') {
+      data = generateRecordDraft(
+        e.parameter.studentName || '',
+        e.parameter.ban         || '',
+        e.parameter.modum       || '',
+        e.parameter.num         || ''
+      );
     } else if (action === 'debugGrading') {
       data = debugGradingSheet();
     } else if (action === 'debugPassword') {
@@ -732,6 +739,97 @@ function getMyData(ban, num, name) {
   const scores = getStudentScore(ban, num, name);
 
   return { reflections, linksData, peer, scores, modum };
+}
+
+// =============================================
+// 생활기록부 초안 생성 (Gemini API)
+// API 키는 코드에 넣지 않고 스크립트 속성에 저장:
+// Apps Script 편집기 좌측 "프로젝트 설정" → "스크립트 속성"에서
+// GEMINI_API_KEY 를 직접 등록하거나, 편집기에서 setGeminiApiKey('키') 1회 실행
+// =============================================
+function setGeminiApiKey(key) {
+  PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', key);
+  return 'saved';
+}
+
+function generateRecordDraft(studentName, ban, modum, num) {
+  try {
+    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    if (!apiKey) return { error: 'GEMINI_API_KEY가 설정되지 않았습니다. 스크립트 속성에 등록해주세요.' };
+
+    const reflections = getStudentReflections(studentName, ban, modum);
+    const peer = getPeerStats(studentName, ban, modum);
+
+    const lines = [];
+    reflections.forEach(r => {
+      lines.push(`[${r.source}]`);
+      r.responses.forEach(resp => {
+        r.questions.forEach((q, i) => {
+          const a = resp.answers[i];
+          if (a) lines.push(`- ${q}: ${a}`);
+        });
+      });
+    });
+
+    if (peer && peer.received && peer.received.items && peer.received.items.length) {
+      lines.push('[동료들이 평가한 내용]');
+      peer.received.items.forEach(item => {
+        item.contents.forEach(c => lines.push(`- ${c.q}: ${c.a}`));
+      });
+    }
+
+    const dataText = lines.join('\n');
+    if (!dataText.trim()) return { error: '해당 학생의 활동 데이터가 없습니다.' };
+
+    const prompt = buildRecordPrompt(studentName, dataText);
+    const draft = callGemini(prompt, apiKey);
+    return { draft };
+  } catch (e) {
+    Logger.log(`[generateRecordDraft] 오류: ${e}`);
+    return { error: e.toString() };
+  }
+}
+
+function buildRecordPrompt(studentName, dataText) {
+  return [
+    '너는 한국 중·고등학교 과학 교사가 학교생활기록부 "교과학습발달상황 - 과목별 세부능력 및 특기사항"을 작성하는 것을 돕는 보조자야.',
+    `아래는 "${studentName}" 학생이 화학/탐구 활동에서 작성한 성찰일지 응답과 동료들이 남긴 평가 내용이다.`,
+    '',
+    '=== 학생 활동 데이터 ===',
+    dataText,
+    '=== 데이터 끝 ===',
+    '',
+    '위 데이터를 바탕으로 NEIS 학교생활기록부 작성 기준에 맞는 세부능력 및 특기사항 초안을 작성해라.',
+    '작성 규칙:',
+    '1. 문장 끝은 "~함.", "~수행함." 과 같이 명사형/서술형으로 끝맺고 학생 이름이나 "그/그녀"는 쓰지 말 것',
+    '2. 구체적인 탐구 과정, 행동, 태도, 성장 모습이 드러나도록 작성',
+    '3. 점수, 등수, 순위, 영어 단어(불가피한 고유명사 제외)는 절대 언급하지 말 것',
+    '4. 추상적 미사여구보다 데이터에 근거한 구체적 사례를 우선할 것',
+    '5. 전체 길이는 500~700자 내외로 작성',
+    '6. 이것은 교사가 검토 후 수정할 초안이므로 자연스러운 문장으로 작성',
+    '',
+    '결과는 완성된 문단 형태로만 출력하고, 다른 설명이나 머리말은 붙이지 말 것.'
+  ].join('\n');
+}
+
+function callGemini(prompt, apiKey) {
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey;
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+  };
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  const json = JSON.parse(res.getContentText());
+  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+  const candidate = json.candidates && json.candidates[0];
+  const text = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;
+  if (!text) throw new Error('Gemini 응답에서 텍스트를 찾을 수 없습니다: ' + res.getContentText());
+  return text.trim();
 }
 
 // =============================================
