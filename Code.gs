@@ -6,6 +6,7 @@ const SS_INQUIRY = '1JJy80Ah9NaJN_BNk21Nyb7P3dtli5OFtR2AfMNgPkb4';
 const SS_LINKS = '1ENuXr_ibmRNeUlAGjQLwh3Vs5zLP5hCCNy_hDEgFb-0'; // 계획서/보고서/캔바/상호작용 링크
 const SS_PEER     = '1WItERzz5PtYV-T3BGTE7Dfh2N951qWMbn3iKz65T5-w';  // 동료평가
 const SS_PASSWORD = '1JcgoufQUypJR6ItEBGWR7xVE-e1vBqXqfYddkEgXlJg';  // 학생 비밀번호
+const SS_AUDIENCE = '19TqLSQ6Jyvu_USasbu4bPtXLtpnXp2Kf9bIqFFq6OSU'; // 청취자 평가
 const SS_GRADING  = SS_INQUIRY; // 채점탭이 탐구 스프레드시트에 있음
 
 const STUDENT_INFO_SHEET = '학생 정보';
@@ -75,6 +76,12 @@ function doGet(e) {
         e.parameter.studentName || '',
         e.parameter.ban         || '',
         e.parameter.modum       || ''
+      );
+    } else if (action === 'getAudienceStats') {
+      data = getAudienceStats(
+        e.parameter.studentName || '',
+        e.parameter.ban         || '',
+        false
       );
     } else if (action === 'generateRecordDraft') {
       data = generateRecordDraft(
@@ -202,15 +209,53 @@ function getFilteredStudents(ban, modum, name) {
     return true;
   });
 
-  const countMap = buildResponseCountMap();
-  const peerMap  = buildPeerCountMap();
+  const countMap    = buildResponseCountMap();
+  const peerMap     = buildPeerCountMap();
+  const audienceMap = buildAudienceCountMap();
 
   return filtered.map(s => {
     const key = norm(s.name);
-    const counts = countMap[key] || { booth: 0, inquiry: 0, boothTotal: 0, inquiryTotal: 0 };
-    const peer   = peerMap[key]  || { given: 0, received: 0 };
-    return { ...s, counts, peer };
+    const counts   = countMap[key]    || { booth: 0, inquiry: 0, boothTotal: 0, inquiryTotal: 0 };
+    const peer     = peerMap[key]     || { given: 0, received: 0 };
+    const audience = audienceMap[key] || { given: 0, received: 0 };
+    return { ...s, counts, peer, audience };
   });
+}
+
+// 청취자 평가 — 칩용 횟수 맵 (이름 → {given, received})
+function buildAudienceCountMap() {
+  const map = {};
+  const PAIR_NAME_COLS = [5, 7, 9, 11]; // F, H, J, L
+  try {
+    const ss    = SpreadsheetApp.openById(SS_AUDIENCE);
+    const sheet = ss.getSheets()[0];
+    const rows  = sheet.getDataRange().getValues();
+    if (rows.length < 2) return map;
+
+    const header = rows[0].map(h => String(h).trim());
+    const wNameCol = findColIndex(header.slice(1, 4).map(h => h), ['이름', '성명', '작성자', '학생']) + 1 || 1;
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const wName = norm(row[wNameCol] || '');
+      if (wName) {
+        if (!map[wName]) map[wName] = { given: 0, received: 0 };
+        map[wName].given++;
+      }
+      PAIR_NAME_COLS.forEach(nameCol => {
+        const evalCol = nameCol + 1;
+        const tName = norm(row[nameCol] || '');
+        const tEval = String(row[evalCol] || '').trim();
+        if (tName && tEval) {
+          if (!map[tName]) map[tName] = { given: 0, received: 0 };
+          map[tName].received++;
+        }
+      });
+    }
+  } catch (e) {
+    Logger.log(`[buildAudienceCountMap] 오류: ${e}`);
+  }
+  return map;
 }
 
 // 이름 → {booth응답수, inquiry응답수} 맵 생성
@@ -565,6 +610,108 @@ function getPeerStats(studentName, ban, modum) {
     };
   } catch (e) {
     Logger.log(`[getPeerStats] 오류: ${e}`);
+    return { error: e.toString() };
+  }
+}
+
+// =============================================
+// 청취자 평가 통계
+// BCD=작성자정보, E=전반평가, F/H/J/L=대상이름, G/I/K/M=개인평가
+// anonymous=true 이면 받은 평가의 작성자명 숨김
+// =============================================
+function getAudienceStats(studentName, ban, anonymous) {
+  const OVERALL_COL = 4; // E열
+  const PAIRS = [
+    { nameCol: 5,  evalCol: 6  }, // F, G
+    { nameCol: 7,  evalCol: 8  }, // H, I
+    { nameCol: 9,  evalCol: 10 }, // J, K
+    { nameCol: 11, evalCol: 12 }, // L, M
+  ];
+
+  try {
+    const ss    = SpreadsheetApp.openById(SS_AUDIENCE);
+    const sheet = ss.getSheets()[0];
+    const rows  = sheet.getDataRange().getValues();
+    if (rows.length < 2) return { given: [], received: [], stats: {} };
+
+    const header = rows[0].map(h => String(h).trim());
+    const wNameCol = findColIndex(header.slice(1, 4).map(h => h), ['이름', '성명', '작성자', '학생']) + 1 || 1;
+    const wBanCol  = [1,2,3].find(c => header[c] && header[c].includes('반')) ?? -1;
+
+    const normName = norm(studentName);
+
+    const givenCharMap    = {};
+    const receivedCharMap = {};
+    const givenItems    = [];
+    const receivedItems = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row   = rows[i];
+      const wName = norm(row[wNameCol] || '');
+      if (!wName) continue;
+
+      const overallText = String(row[OVERALL_COL] || '').trim();
+      let rowGivenChars = overallText.length;
+      const indivList = PAIRS.map(p => {
+        const tName = String(row[p.nameCol] || '').trim();
+        const tEval = String(row[p.evalCol] || '').trim();
+        rowGivenChars += tEval.length;
+        return { targetName: tName, comment: tEval };
+      });
+
+      givenCharMap[wName] = (givenCharMap[wName] || 0) + rowGivenChars;
+      PAIRS.forEach(p => {
+        const tName = norm(row[p.nameCol] || '');
+        const tEval = String(row[p.evalCol] || '').trim();
+        if (tName && tEval) {
+          receivedCharMap[tName] = (receivedCharMap[tName] || 0) + tEval.length;
+        }
+      });
+
+      if (wName === normName) {
+        givenItems.push({
+          overallComment: overallText,
+          individuals: indivList.filter(c => c.targetName || c.comment),
+          charCount: rowGivenChars
+        });
+      }
+
+      PAIRS.forEach(p => {
+        const tName = norm(row[p.nameCol] || '');
+        const tEval = String(row[p.evalCol] || '').trim();
+        if (tName === normName && tEval) {
+          receivedItems.push({
+            writerName:    anonymous ? '익명' : String(row[wNameCol] || '').trim(),
+            overallComment: overallText,
+            comment:       tEval,
+            charCount:     tEval.length
+          });
+        }
+      });
+    }
+
+    const classNames = getClassMemberNorms(ban);
+
+    return {
+      given:    givenItems,
+      received: receivedItems,
+      stats: {
+        givenCount:          givenItems.length,
+        givenCharSum:        givenCharMap[normName] || 0,
+        givenSchoolRank:     computeRank(givenCharMap, normName),
+        givenSchoolTotal:    Object.keys(givenCharMap).length,
+        givenClassRank:      computeRankFiltered(givenCharMap, normName, classNames),
+        givenClassTotal:     classNames.size,
+        receivedCount:       receivedItems.length,
+        receivedCharSum:     receivedCharMap[normName] || 0,
+        receivedSchoolRank:  computeRank(receivedCharMap, normName),
+        receivedSchoolTotal: Object.keys(receivedCharMap).length,
+        receivedClassRank:   computeRankFiltered(receivedCharMap, normName, classNames),
+        receivedClassTotal:  classNames.size,
+      }
+    };
+  } catch (e) {
+    Logger.log(`[getAudienceStats] 오류: ${e}`);
     return { error: e.toString() };
   }
 }
