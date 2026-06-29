@@ -963,7 +963,11 @@ function callGemini(prompt, apiKey) {
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey;
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 4096,
+      thinkingConfig: { thinkingBudget: 0 }
+    }
   };
   const res = UrlFetchApp.fetch(url, {
     method: 'post',
@@ -974,8 +978,12 @@ function callGemini(prompt, apiKey) {
   const json = JSON.parse(res.getContentText());
   if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
   const candidate = json.candidates && json.candidates[0];
-  const text = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;
+  const parts = candidate && candidate.content && candidate.content.parts;
+  const text = parts ? parts.map(p => p.text || '').join('') : '';
   if (!text) throw new Error('Gemini 응답에서 텍스트를 찾을 수 없습니다: ' + res.getContentText());
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    Logger.log('[callGemini] MAX_TOKENS로 잘림: ' + text);
+  }
   return text.trim();
 }
 
