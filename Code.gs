@@ -148,8 +148,14 @@ function debugSheetInfo() {
 // =============================================
 // 학생 정보 시트에서 전체 학생 목록 로드
 // =============================================
+// 모둠 값이 비어있거나 수식 오류(#N/A 등)인지 판별
+function isBlankOrErrorModum(v) {
+  const s = String(v || '').trim();
+  return !s || s.startsWith('#') || /^n\/?a$/i.test(s);
+}
+
 function getAllStudents() {
-  const result = [];
+  const byKey = new Map(); // norm(name)+'_'+ban → student
 
   [
     { id: SS_BOOTH, label: '부스 운영' },
@@ -179,20 +185,30 @@ function getAllStudents() {
         const name = col.name >= 0 ? norm(row[col.name]) : '';
         if (!name) continue;
 
-        result.push({
+        const entry = {
           source: label,
           sourceId: id,
           ban:   col.ban   >= 0 ? String(row[col.ban]).trim()   : '',
           modum: col.modum >= 0 ? String(row[col.modum]).trim() : '',
           num:   col.num   >= 0 ? String(row[col.num]).trim()   : '',
           name:  col.name  >= 0 ? String(row[col.name]).trim()  : '',
-        });
+        };
+
+        const key = name + '_' + norm(entry.ban);
+        const existing = byKey.get(key);
+        if (!existing) {
+          byKey.set(key, entry);
+        } else if (isBlankOrErrorModum(existing.modum) && !isBlankOrErrorModum(entry.modum)) {
+          // 기존 값이 비어있거나 오류면, 모둠 값이 채워진 쪽으로 교체
+          byKey.set(key, entry);
+        }
       }
     } catch (e) {
       Logger.log(`[getAllStudents] ${label} 오류: ${e}`);
     }
   });
 
+  const result = Array.from(byKey.values());
   Logger.log(`[getAllStudents] 총 ${result.length}명`);
   return result;
 }
@@ -952,8 +968,10 @@ function buildRecordPrompt(studentName, dataText) {
     '2. 구체적인 탐구 과정, 행동, 태도, 성장 모습이 드러나도록 작성',
     '3. 점수, 등수, 순위, 영어 단어(불가피한 고유명사 제외)는 절대 언급하지 말 것',
     '4. 추상적 미사여구보다 데이터에 근거한 구체적 사례를 우선할 것',
-    '5. 전체 길이는 500~700자 내외로 작성',
-    '6. 이것은 교사가 검토 후 수정할 초안이므로 자연스러운 문장으로 작성',
+    '5. 여러 출처(부스, 탐구, 동료평가)의 내용을 출처별로 나누지 말고 하나의 자연스러운 문단으로 녹여 쓸 것',
+    '6. 데이터에 있는 내용을 모두 담을 필요 없음. 가장 인상적인 활동 한두 가지만 골라 압축적으로 서술할 것',
+    '7. 전체 길이는 300자 내외로 작성 (짧고 압축적으로)',
+    '8. 이것은 교사가 검토 후 수정할 초안이므로 자연스러운 문장으로 작성',
     '',
     '결과는 완성된 문단 형태로만 출력하고, 다른 설명이나 머리말은 붙이지 말 것.'
   ].join('\n');

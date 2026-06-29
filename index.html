@@ -797,14 +797,27 @@ async function generateBulkDrafts() {
     progressEl.innerHTML = `<span class="bar"><span class="bar-fill" style="width:${pct}%"></span></span>${i + 1}/${targets.length} 처리 중 — ${s.name}`;
 
     let draft = '', error = '';
-    try {
-      const res = await callApi('generateRecordDraft', {
-        studentName: s.name, ban: s.ban, modum: s.modum, num: s.num
-      });
-      if (res && res.error) error = res.error;
-      else draft = (res && res.draft) || '';
-    } catch (err) {
-      error = err.message || String(err);
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await callApi('generateRecordDraft', {
+          studentName: s.name, ban: s.ban, modum: s.modum, num: s.num
+        });
+        if (res && res.error) {
+          error = res.error;
+          if (/quota|rate.?limit/i.test(error) && attempt < MAX_RETRIES) {
+            progressEl.innerHTML = `<span class="bar"><span class="bar-fill" style="width:${pct}%"></span></span>${i + 1}/${targets.length} — ${s.name} 할당량 제한, ${15 * (attempt + 1)}초 후 재시도...`;
+            await sleep(15000 * (attempt + 1));
+            continue;
+          }
+        } else {
+          draft = (res && res.draft) || '';
+          error = '';
+        }
+      } catch (err) {
+        error = err.message || String(err);
+      }
+      break;
     }
 
     rows.push({
@@ -813,7 +826,7 @@ async function generateBulkDrafts() {
     });
 
     // Gemini 무료 티어 분당 호출 제한(약 10회/분)을 피하기 위한 대기
-    if (i < targets.length - 1) await sleep(7000);
+    if (i < targets.length - 1) await sleep(8000);
   }
 
   progressEl.textContent = `완료 (${targets.length}명) — 엑셀 다운로드 중...`;
