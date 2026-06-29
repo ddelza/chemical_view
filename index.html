@@ -530,6 +530,10 @@
   .bulk-progress { font-size: 0.82rem; color: #666; }
   .bulk-progress .bar { display: inline-block; width: 120px; height: 6px; background: #eee; border-radius: 4px; overflow: hidden; vertical-align: middle; margin-right: 8px; }
   .bulk-progress .bar-fill { height: 100%; background: #4f8ef7; transition: width 0.2s; }
+  .bulk-last-result { margin-bottom: 12px; font-size: 0.82rem; color: #444; padding: 10px 12px; background: #f8faff; border-radius: 8px; display: none; white-space: pre-wrap; line-height: 1.5; }
+  .bulk-last-result .name { font-weight: 700; color: #1a1a2e; margin-right: 6px; }
+  .bulk-last-result.has-error { background: #fff5f5; }
+  .bulk-last-result .err-text { color: #c62828; font-weight: 600; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -609,6 +613,7 @@
       <button class="btn btn-secondary" id="btnBulkGenerate" onclick="generateBulkDrafts()">선택 학생 초안 일괄 생성 → 엑셀 다운로드</button>
       <span class="bulk-progress" id="bulkProgress"></span>
     </div>
+    <div class="bulk-last-result" id="bulkLastResult"></div>
     <div class="student-grid" id="studentGrid"></div>
   </div>
 
@@ -778,9 +783,22 @@ function getSelectedBulkStudents() {
 // ── 선택 학생 일괄 초안 생성 + 엑셀 다운로드 ────────────
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+// 직전 처리 결과 1개만 표시 (다음 학생으로 넘어갈 때 갱신)
+function renderLastBulkResult(name, draft, error) {
+  const el = document.getElementById('bulkLastResult');
+  const isError = !!error;
+  el.style.display = 'block';
+  el.classList.toggle('has-error', isError);
+  const body = isError
+    ? `<span class="err-text">${error.replace(/</g, '&lt;')}</span>`
+    : draft.replace(/</g, '&lt;');
+  el.innerHTML = `<span class="name">${name}</span>${body}`;
+}
+
 async function generateBulkDrafts() {
   const targets = getSelectedBulkStudents();
   const progressEl = document.getElementById('bulkProgress');
+  const lastResultEl = document.getElementById('bulkLastResult');
   const btn = document.getElementById('btnBulkGenerate');
 
   if (targets.length === 0) {
@@ -789,6 +807,7 @@ async function generateBulkDrafts() {
   }
 
   btn.disabled = true;
+  lastResultEl.style.display = 'none';
   const rows = [];
 
   for (let i = 0; i < targets.length; i++) {
@@ -824,6 +843,7 @@ async function generateBulkDrafts() {
       이름: s.name, 반: s.ban, 모둠: s.modum,
       생활기록부초안: draft, 오류: error
     });
+    renderLastBulkResult(s.name, draft, error);
 
     // Gemini 무료 티어 분당 호출 제한(약 10회/분)을 피하기 위한 대기
     if (i < targets.length - 1) await sleep(8000);
